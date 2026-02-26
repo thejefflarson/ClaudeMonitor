@@ -1,0 +1,7 @@
+{"cwd":"/Users/jeff/dev/myapp","sessionId":"abc123","slug":"cool-slug","timestamp":"2026-02-25T10:00:00.000Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"TaskCreate","input":{"subject":"Explore codebase","description":"Look around","activeForm":"Exploring"}}]}}
+{"cwd":"/Users/jeff/dev/myapp","sessionId":"abc123","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"Task #1 created successfully: Explore codebase","is_error":false}]}}
+{"cwd":"/Users/jeff/dev/myapp","sessionId":"abc123","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_2","name":"TaskCreate","input":{"subject":"Write tests","description":"TDD","activeForm":"Writing tests"}}]}}
+{"cwd":"/Users/jeff/dev/myapp","sessionId":"abc123","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_2","content":"Task #2 created successfully: Write tests","is_error":false}]}}
+{"cwd":"/Users/jeff/dev/myapp","sessionId":"abc123","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_3","name":"TaskUpdate","input":{"taskId":"1","status":"in_progress"}}]}}
+{"cwd":"/Users/jeff/dev/myapp","sessionId":"abc123","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_4","name":"TaskUpdate","input":{"taskId":"1","status":"completed"}}]}}
+{"cwd":"/Users/jeff/dev/myapp","sessionId":"abc123","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_5","name":"TaskUpdate","input":{"taskId":"2","status":"in_progress"}}]}}
