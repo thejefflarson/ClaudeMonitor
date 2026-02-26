@@ -1,0 +1,34 @@
+name: ClaudeMonitor
+options:
+  bundleIdPrefix: com.jeff
+  deploymentTarget:
+    macOS: "13.0"
+  xcodeVersion: "15"
+targets:
+  ClaudeMonitor:
+    type: application
+    platform: macOS
+    sources:
+      - ClaudeMonitor
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jeff.ClaudeMonitor
+        INFOPLIST_FILE: ClaudeMonitor/Info.plist
+        CODE_SIGN_ENTITLEMENTS: ClaudeMonitor/ClaudeMonitor.entitlements
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.9"
+  ClaudeMonitorTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: ClaudeMonitorTests
+    resources:
+      - path: ClaudeMonitorTests/Fixtures
+        optional: true
+    dependencies:
+      - target: ClaudeMonitor
+    settings:
+      base:
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ClaudeMonitor.app/Contents/MacOS/ClaudeMonitor"
