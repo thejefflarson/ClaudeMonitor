@@ -46,6 +46,6 @@ final class AppStore: ObservableObject {
     }
 
     private func refreshSessions() async {
-        sessions = LocalLogsService.activeSessions(withinSeconds: 1800)
+        sessions = LocalLogsService.activeSessions()
     }
 }

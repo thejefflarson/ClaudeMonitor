@@ -70,40 +70,122 @@ enum LocalLogsService {
         return result
     }
 
-    /// Returns sessions whose JSONL was modified within `withinSeconds`, with the last user message as status.
-    static func activeSessions(withinSeconds: TimeInterval = 300) -> [SessionInfo] {
-        let cutoff = Date().addingTimeInterval(-withinSeconds)
-        var sessions: [SessionInfo] = []
+    /// Returns one SessionInfo per running claude process, augmented with JSONL data.
+    static func activeSessions(withinSeconds: TimeInterval = 1800) -> [SessionInfo] {
+        // Build JSONL index: sessionId → (file, projectPath, lastActivity)
+        // Also reverse-index: absProjectPath → [(sessionId, file, lastActivity)]
+        var sessionFiles:   [String: (file: URL, projectPath: String, lastActivity: Date)] = [:]
+        var cwdToSessions:  [String: [(sessionId: String, file: URL, lastActivity: Date)]] = [:]
 
-        guard let projectDirs = try? FileManager.default.contentsOfDirectory(
+        if let projectDirs = try? FileManager.default.contentsOfDirectory(
             at: claudeProjectsDir, includingPropertiesForKeys: [.contentModificationDateKey]
-        ) else { return [] }
+        ) {
+            for dir in projectDirs where dir.hasDirectoryPath {
+                guard let jsonlFiles = try? FileManager.default.contentsOfDirectory(
+                    at: dir, includingPropertiesForKeys: [.contentModificationDateKey]
+                ).filter({ $0.pathExtension == "jsonl" }) else { continue }
 
-        for dir in projectDirs where dir.hasDirectoryPath {
-            guard let jsonlFiles = try? FileManager.default.contentsOfDirectory(
-                at: dir, includingPropertiesForKeys: [.contentModificationDateKey]
-            ).filter({ $0.pathExtension == "jsonl" }) else { continue }
-
-            for file in jsonlFiles {
-                let lastActivity = modDate(file)
-                guard lastActivity > cutoff else { continue }
-
-                let sessionId = file.deletingPathExtension().lastPathComponent
                 let projectPath = projectPathFromDir(dir)
-                let processing = lastActivity > Date().addingTimeInterval(-15)
-                let status = processing ? lastUserMessage(in: file) : nil
-                let tasks = processing ? readTasks(sessionId: sessionId) : []
-                sessions.append(SessionInfo(
-                    projectPath: projectPath,
-                    lastActivity: lastActivity,
-                    currentStatus: status,
-                    inProgressTasks: tasks,
-                    isProcessing: processing
-                ))
+                let absPath = dir.path  // real filesystem path for cwd matching
+
+                for file in jsonlFiles {
+                    let sessionId = file.deletingPathExtension().lastPathComponent
+                    let lastActivity = modDate(file)
+                    sessionFiles[sessionId] = (file, projectPath, lastActivity)
+                    cwdToSessions[absPath, default: []].append((sessionId, file, lastActivity))
+                }
             }
         }
 
+        // Resolve running claude processes → session IDs
+        let liveSessionIds = runningClaudeSessionIds(cwdToSessions: cwdToSessions)
+
+        // Build session list: live processes + recent JSONL activity as fallback
+        let recentCutoff = Date().addingTimeInterval(-withinSeconds)
+        var seen = Set<String>()
+        var sessions: [SessionInfo] = []
+
+        func addSession(sessionId: String) {
+            guard seen.insert(sessionId).inserted else { return }
+            guard let entry = sessionFiles[sessionId] else { return }
+            let processing = entry.lastActivity > Date().addingTimeInterval(-15)
+            let status = processing ? lastUserMessage(in: entry.file) : nil
+            let tasks  = processing ? readTasks(sessionId: sessionId) : []
+            sessions.append(SessionInfo(
+                projectPath: entry.projectPath,
+                lastActivity: entry.lastActivity,
+                currentStatus: status,
+                inProgressTasks: tasks,
+                isProcessing: processing
+            ))
+        }
+
+        for sessionId in liveSessionIds { addSession(sessionId: sessionId) }
+        for (sessionId, entry) in sessionFiles where entry.lastActivity > recentCutoff {
+            addSession(sessionId: sessionId)
+        }
+
         return sessions.sorted { $0.lastActivity > $1.lastActivity }
+    }
+
+    /// Returns session IDs of all running `claude` processes.
+    private static func runningClaudeSessionIds(
+        cwdToSessions: [String: [(sessionId: String, file: URL, lastActivity: Date)]]
+    ) -> [String] {
+        // ps -Ao pid,args → find claude processes
+        let ps = Process()
+        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
+        ps.arguments = ["-Ao", "pid,args"]
+        let psPipe = Pipe()
+        ps.standardOutput = psPipe
+        ps.standardError = Pipe()
+        guard (try? ps.run()) != nil else { return [] }
+        ps.waitUntilExit()
+        let psText = String(data: psPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+
+        var result: [String] = []
+        var noresumePids: [String] = []
+
+        for line in psText.components(separatedBy: "\n") {
+            let parts = line.trimmingCharacters(in: .whitespaces).components(separatedBy: .whitespaces)
+            guard parts.count >= 2, parts[1] == "claude",
+                  let pid = parts.first else { continue }
+
+            if let idx = parts.firstIndex(of: "--resume"), idx + 1 < parts.count {
+                result.append(parts[idx + 1])
+            } else {
+                noresumePids.append(pid)
+            }
+        }
+
+        // For processes without --resume, resolve via working directory
+        for pid in noresumePids {
+            guard let cwd = processCwd(pid: pid),
+                  let sessions = cwdToSessions[cwd],
+                  let newest = sessions.max(by: { $0.lastActivity < $1.lastActivity })
+            else { continue }
+            result.append(newest.sessionId)
+        }
+
+        return result
+    }
+
+    /// Returns the working directory of a process via lsof.
+    private static func processCwd(pid: String) -> String? {
+        let lsof = Process()
+        lsof.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        lsof.arguments = ["-p", pid]
+        let pipe = Pipe()
+        lsof.standardOutput = pipe
+        lsof.standardError = Pipe()
+        guard (try? lsof.run()) != nil else { return nil }
+        lsof.waitUntilExit()
+        let text = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        for line in text.components(separatedBy: "\n") {
+            guard line.contains(" cwd ") else { continue }
+            return line.components(separatedBy: .whitespaces).last
+        }
+        return nil
     }
 
     // MARK: - Private helpers
