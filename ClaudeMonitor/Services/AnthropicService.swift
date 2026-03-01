@@ -44,9 +44,10 @@ enum AnthropicService {
                 firstDate = iso.date(from: s)
             }
             for result in (bucket["results"] as? [[String: Any]] ?? []) {
-                if let amountStr = result["amount"] as? String,
-                   let cents = Double(amountStr) {
-                    totalCents += cents
+                if let n = result["amount"] as? Double {
+                    totalCents += n
+                } else if let s = result["amount"] as? String, let n = Double(s) {
+                    totalCents += n
                 }
             }
         }

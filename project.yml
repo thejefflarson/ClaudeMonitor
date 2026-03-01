@@ -32,3 +32,4 @@ targets:
       base:
         BUNDLE_LOADER: "$(TEST_HOST)"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ClaudeMonitor.app/Contents/MacOS/ClaudeMonitor"
+        GENERATE_INFOPLIST_FILE: YES

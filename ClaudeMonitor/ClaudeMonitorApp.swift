@@ -5,10 +5,14 @@ struct ClaudeMonitorApp: App {
     @StateObject private var store = AppStore()
 
     var body: some Scene {
-        MenuBarExtra(store.trayLabel, systemImage: "cpu") {
+        MenuBarExtra {
             MenuView()
                 .environmentObject(store)
+        } label: {
+            Text(store.trayLabel)
+                .monospacedDigit()
         }
         .menuBarExtraStyle(.window)
+
     }
 }
