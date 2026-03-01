@@ -140,7 +140,7 @@ enum LocalLogsService {
             pathBuf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
             guard proc_pidpath(pid, &pathBuf, UInt32(MAXPATHLEN)) > 0 else { continue }
             let execPath = String(cString: pathBuf)
-            guard execPath.hasSuffix("/claude") || execPath == "claude" else { continue }
+            guard execPath.contains("/claude/versions/") || execPath.hasSuffix("/claude") else { continue }
 
             // Try to extract --resume <sessionId> from args
             if let sessionId = resumeSessionId(pid: pid) {
