@@ -90,7 +90,7 @@ enum LocalLogsService {
 
                 let sessionId = file.deletingPathExtension().lastPathComponent
                 let projectPath = projectPathFromDir(dir)
-                let processing = isProcessing(in: file)
+                let processing = lastActivity > Date().addingTimeInterval(-15)
                 let status = processing ? lastUserMessage(in: file) : nil
                 let tasks = processing ? readTasks(sessionId: sessionId) : []
                 sessions.append(SessionInfo(
@@ -125,23 +125,6 @@ enum LocalLogsService {
             else { return nil }
             return TaskItem(id: id, subject: subject)
         }.sorted { (Int($0.id) ?? 0) < (Int($1.id) ?? 0) }
-    }
-
-    /// Returns true if the last conversation turn in the file is a user message
-    /// (meaning Claude hasn't responded yet and is actively processing).
-    private static func isProcessing(in file: URL) -> Bool {
-        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return false }
-        let lines = text.components(separatedBy: "\n")
-        for line in lines.reversed() {
-            guard !line.isEmpty,
-                  let data = line.data(using: .utf8),
-                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let type_ = obj["type"] as? String,
-                  type_ == "user" || type_ == "assistant"
-            else { continue }
-            return type_ == "user"
-        }
-        return false
     }
 
     /// Reads the last user-typed message from a JSONL session file.
