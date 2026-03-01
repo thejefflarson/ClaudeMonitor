@@ -70,67 +70,38 @@ enum LocalLogsService {
         return result
     }
 
-    /// Returns sessions that are either recently active or have incomplete tasks.
-    /// - Recently active: JSONL modified within `withinSeconds`
-    /// - Has tasks: any session in ~/.claude/tasks/ with non-completed tasks
+    /// Returns sessions whose JSONL was modified within `withinSeconds`, with the last user message as status.
     static func activeSessions(withinSeconds: TimeInterval = 300) -> [SessionInfo] {
         let cutoff = Date().addingTimeInterval(-withinSeconds)
+        var sessions: [SessionInfo] = []
 
-        // Build index: sessionId → (projectPath, lastActivity) from all project JSONL files
-        var sessionIndex: [String: (projectPath: String, lastActivity: Date)] = [:]
-        if let projectDirs = try? FileManager.default.contentsOfDirectory(
+        guard let projectDirs = try? FileManager.default.contentsOfDirectory(
             at: claudeProjectsDir, includingPropertiesForKeys: [.contentModificationDateKey]
-        ) {
-            for dir in projectDirs where dir.hasDirectoryPath {
-                guard let jsonlFiles = try? FileManager.default.contentsOfDirectory(
-                    at: dir, includingPropertiesForKeys: [.contentModificationDateKey]
-                ).filter({ $0.pathExtension == "jsonl" }) else { continue }
+        ) else { return [] }
 
-                for file in jsonlFiles {
-                    let sessionId = file.deletingPathExtension().lastPathComponent
-                    let lastActivity = modDate(file)
-                    let projectPath = projectPathFromDir(dir)
-                    sessionIndex[sessionId] = (projectPath, lastActivity)
-                }
-            }
-        }
+        for dir in projectDirs where dir.hasDirectoryPath {
+            guard let jsonlFiles = try? FileManager.default.contentsOfDirectory(
+                at: dir, includingPropertiesForKeys: [.contentModificationDateKey]
+            ).filter({ $0.pathExtension == "jsonl" }) else { continue }
 
-        // Collect sessions: recently active ones + any with incomplete tasks
-        var sessions: [String: SessionInfo] = [:]
+            for file in jsonlFiles {
+                let lastActivity = modDate(file)
+                guard lastActivity > cutoff else { continue }
 
-        // 1. Add recently active sessions (even with no tasks)
-        for (sessionId, info) in sessionIndex where info.lastActivity > cutoff {
-            let tasks = readTasks(sessionId: sessionId)
-            sessions[sessionId] = SessionInfo(
-                projectPath: info.projectPath,
-                lastActivity: info.lastActivity,
-                inProgressTasks: tasks
-            )
-        }
-
-        // 2. Add sessions with incomplete tasks that were active within 24 hours
-        let taskCutoff = Date().addingTimeInterval(-86_400)
-        if let taskSessionDirs = try? FileManager.default.contentsOfDirectory(
-            at: claudeTasksDir, includingPropertiesForKeys: nil
-        ) {
-            for dir in taskSessionDirs where dir.hasDirectoryPath {
-                let sessionId = dir.lastPathComponent
-                guard sessions[sessionId] == nil else { continue } // already included
-
+                let sessionId = file.deletingPathExtension().lastPathComponent
+                let projectPath = projectPathFromDir(dir)
+                let status = lastUserMessage(in: file)
                 let tasks = readTasks(sessionId: sessionId)
-                guard !tasks.isEmpty else { continue }
-
-                if let info = sessionIndex[sessionId], info.lastActivity > taskCutoff {
-                    sessions[sessionId] = SessionInfo(
-                        projectPath: info.projectPath,
-                        lastActivity: info.lastActivity,
-                        inProgressTasks: tasks
-                    )
-                }
+                sessions.append(SessionInfo(
+                    projectPath: projectPath,
+                    lastActivity: lastActivity,
+                    currentStatus: status,
+                    inProgressTasks: tasks
+                ))
             }
         }
 
-        return sessions.values.sorted { $0.lastActivity > $1.lastActivity }
+        return sessions.sorted { $0.lastActivity > $1.lastActivity }
     }
 
     // MARK: - Private helpers
@@ -152,6 +123,34 @@ enum LocalLogsService {
             else { return nil }
             return TaskItem(id: id, subject: subject)
         }.sorted { (Int($0.id) ?? 0) < (Int($1.id) ?? 0) }
+    }
+
+    /// Reads the last user-typed message from a JSONL session file.
+    private static func lastUserMessage(in file: URL) -> String? {
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
+        let lines = text.components(separatedBy: "\n")
+        for line in lines.reversed() {
+            guard !line.isEmpty,
+                  let data = line.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let msg = obj["message"] as? [String: Any],
+                  msg["role"] as? String == "user"
+            else { continue }
+
+            let content = msg["content"]
+            if let text = content as? String, !text.isEmpty {
+                return text.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            if let blocks = content as? [[String: Any]] {
+                for block in blocks {
+                    if block["type"] as? String == "text",
+                       let text = block["text"] as? String, !text.isEmpty {
+                        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                }
+            }
+        }
+        return nil
     }
 
     /// Derives a display path from the project directory name (e.g. "-Users-jeff-dev-chirp" → "~/dev/chirp").

@@ -9,8 +9,6 @@ struct MenuView: View {
             Divider().padding(.horizontal, 12)
             sessionsSection
             Divider().padding(.horizontal, 12)
-            tasksSection
-            Divider().padding(.horizontal, 12)
             actionsSection
         }
         .frame(width: 320)
@@ -65,22 +63,8 @@ struct MenuView: View {
                     .padding(.horizontal, 14)
                     .padding(.bottom, 8)
             } else {
-                ForEach(store.sessions, id: \.projectPath) { session in
-                    HStack(spacing: 6) {
-                        Image(systemName: "folder.fill")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 14)
-                        Text(session.projectPath.components(separatedBy: "/").last ?? session.projectPath)
-                            .lineLimit(1)
-                            .truncationMode(.head)
-                        Spacer()
-                        Text(session.lastActivity.relativeShort)
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .monospacedDigit()
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 3)
+                ForEach(Array(store.sessions.enumerated()), id: \.offset) { _, session in
+                    sessionRow(session)
                 }
                 .padding(.bottom, 6)
             }
@@ -88,43 +72,50 @@ struct MenuView: View {
     }
 
     @ViewBuilder
-    private var tasksSection: some View {
-        let all: [(proj: String, task: TaskItem)] = store.sessions.flatMap { s in
-            let short = s.projectPath.components(separatedBy: "/").last ?? s.projectPath
-            return s.inProgressTasks.map { (short, $0) }
-        }
-
-        VStack(alignment: .leading, spacing: 0) {
-            Label("In Progress", systemImage: "circle.dotted.circle")
-                .sectionHeaderStyle()
-                .padding(.horizontal, 14)
-                .padding(.top, 10)
-                .padding(.bottom, 4)
-
-            if all.isEmpty {
-                Text("No tasks in progress")
+    private func sessionRow(_ session: SessionInfo) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            // Session header: project name + time
+            HStack(spacing: 6) {
+                Image(systemName: "folder.fill")
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 8)
-            } else {
-                ForEach(all, id: \.task.id) { item in
-                    HStack(alignment: .center, spacing: 6) {
-                        Image(systemName: "arrow.trianglehead.2.clockwise")
-                            .foregroundStyle(.orange)
-                            .frame(width: 14)
-                        Text(item.task.subject)
-                            .lineLimit(1)
-                        Spacer()
-                        Text(item.proj)
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 3)
+                    .frame(width: 14)
+                Text(session.projectPath.components(separatedBy: "/").last ?? session.projectPath)
+                    .lineLimit(1)
+                Spacer()
+                Text(session.lastActivity.relativeShort)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+            }
+
+            // Current status (last user message)
+            if let status = session.currentStatus, !status.isEmpty {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .italic()
+                    .lineLimit(2)
+                    .padding(.leading, 20)
+            }
+
+            // In-progress tasks as sub-items
+            ForEach(session.inProgressTasks, id: \.id) { task in
+                HStack(spacing: 4) {
+                    Text("↳")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .padding(.leading, 20)
+                    Image(systemName: "arrow.trianglehead.2.clockwise")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.orange)
+                    Text(task.subject)
+                        .font(.caption)
+                        .lineLimit(1)
                 }
-                .padding(.bottom, 6)
             }
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder
