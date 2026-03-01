@@ -86,11 +86,12 @@ enum LocalLogsService {
                 ).filter({ $0.pathExtension == "jsonl" }) else { continue }
 
                 let projectPath = projectPathFromDir(dir)
+                let decodedCwd = decodedPath(dir)   // e.g. /Users/jeff/dev/monitor
                 for file in jsonlFiles {
                     let sessionId = file.deletingPathExtension().lastPathComponent
                     let lastActivity = modDate(file)
                     sessionFiles[sessionId] = (file, projectPath, lastActivity)
-                    cwdToSessions[dir.path, default: []].append((sessionId, file, lastActivity))
+                    cwdToSessions[decodedCwd, default: []].append((sessionId, file, lastActivity))
                 }
             }
         }
@@ -119,64 +120,81 @@ enum LocalLogsService {
         return sessions.sorted { $0.lastActivity > $1.lastActivity }
     }
 
-    /// Returns session IDs of all running `claude` processes.
+    /// Returns session IDs of all running `claude` processes using native kernel APIs.
     private static func runningClaudeSessionIds(
         cwdToSessions: [String: [(sessionId: String, file: URL, lastActivity: Date)]]
     ) -> [String] {
-        // ps -Ao pid,args → find claude processes
-        let ps = Process()
-        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
-        ps.arguments = ["-Ao", "pid,args"]
-        let psPipe = Pipe()
-        ps.standardOutput = psPipe
-        ps.standardError = Pipe()
-        guard (try? ps.run()) != nil else { return [] }
-        ps.waitUntilExit()
-        let psText = String(data: psPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        var pidCount = proc_listallpids(nil, 0)
+        guard pidCount > 0 else { return [] }
+        var pids = [pid_t](repeating: 0, count: Int(pidCount) + 16)
+        pidCount = proc_listallpids(&pids, Int32(MemoryLayout<pid_t>.size * pids.count))
 
         var result: [String] = []
-        var noresumePids: [String] = []
+        var pathBuf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
 
-        for line in psText.components(separatedBy: "\n") {
-            let parts = line.trimmingCharacters(in: .whitespaces).components(separatedBy: .whitespaces)
-            guard parts.count >= 2, parts[1] == "claude",
-                  let pid = parts.first else { continue }
+        for i in 0..<Int(pidCount) {
+            let pid = pids[i]
+            guard pid > 0 else { continue }
 
-            if let idx = parts.firstIndex(of: "--resume"), idx + 1 < parts.count {
-                result.append(parts[idx + 1])
-            } else {
-                noresumePids.append(pid)
+            // Identify claude processes by executable path
+            pathBuf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+            guard proc_pidpath(pid, &pathBuf, UInt32(MAXPATHLEN)) > 0 else { continue }
+            let execPath = String(cString: pathBuf)
+            guard execPath.hasSuffix("/claude") || execPath == "claude" else { continue }
+
+            // Try to extract --resume <sessionId> from args
+            if let sessionId = resumeSessionId(pid: pid) {
+                result.append(sessionId)
+            } else if let cwd = processCwd(pid: pid),
+                      let sessions = cwdToSessions[cwd],
+                      let newest = sessions.max(by: { $0.lastActivity < $1.lastActivity }) {
+                result.append(newest.sessionId)
             }
         }
-
-        // For processes without --resume, resolve via working directory
-        for pid in noresumePids {
-            guard let cwd = processCwd(pid: pid),
-                  let sessions = cwdToSessions[cwd],
-                  let newest = sessions.max(by: { $0.lastActivity < $1.lastActivity })
-            else { continue }
-            result.append(newest.sessionId)
-        }
-
         return result
     }
 
-    /// Returns the working directory of a process via lsof (cwd only, fast).
-    private static func processCwd(pid: String) -> String? {
-        let lsof = Process()
-        lsof.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        lsof.arguments = ["-p", pid, "-a", "-d", "cwd", "-Fn"]
-        let pipe = Pipe()
-        lsof.standardOutput = pipe
-        lsof.standardError = Pipe()
-        guard (try? lsof.run()) != nil else { return nil }
-        lsof.waitUntilExit()
-        let text = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        // -Fn output: lines starting with 'n' are filenames
-        for line in text.components(separatedBy: "\n") {
-            if line.hasPrefix("n") { return String(line.dropFirst()) }
+    /// Extracts the --resume session ID from a process's args via sysctl KERN_PROCARGS2.
+    private static func resumeSessionId(pid: pid_t) -> String? {
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+        var size = 0
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 4 else { return nil }
+        var buf = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, 3, &buf, &size, nil, 0) == 0 else { return nil }
+
+        // Layout: [int32 argc][exec path\0][null padding][arg0\0][arg1\0]...
+        let argc = Int(buf.withUnsafeBytes { $0.load(as: Int32.self) })
+        var pos = 4
+        while pos < size && buf[pos] != 0 { pos += 1 }  // skip exec path
+        while pos < size && buf[pos] == 0 { pos += 1 }  // skip null padding
+
+        var args: [String] = []
+        for _ in 0..<argc {
+            var end = pos
+            while end < size && buf[end] != 0 { end += 1 }
+            if let s = String(bytes: buf[pos..<end], encoding: .utf8) { args.append(s) }
+            pos = end + 1
+            if pos >= size { break }
+        }
+
+        if let idx = args.firstIndex(of: "--resume"), idx + 1 < args.count {
+            return args[idx + 1]
         }
         return nil
+    }
+
+    /// Returns the working directory of a process via proc_pidinfo PROC_PIDVNODEPATHINFO.
+    /// Buffer layout: vnode_info (152 bytes) + char[1024] for cwd path.
+    private static func processCwd(pid: pid_t) -> String? {
+        let bufSize = 2352   // sizeof(proc_vnodepathinfo): 2 × (152 + 1024)
+        var buf = [UInt8](repeating: 0, count: bufSize)
+        let ret = proc_pidinfo(pid, 9 /* PROC_PIDVNODEPATHINFO */, 0, &buf, Int32(bufSize))
+        guard ret > 0 else { return nil }
+        // pvi_cdir.vip_path starts at offset sizeof(vnode_info) = 152
+        return buf.withUnsafeBufferPointer { ptr in
+            let s = String(cString: ptr.baseAddress! + 152)
+            return s.isEmpty ? nil : s
+        }
     }
 
     // MARK: - Private helpers
@@ -228,12 +246,16 @@ enum LocalLogsService {
         return nil
     }
 
-    /// Derives a display path from the project directory name (e.g. "-Users-jeff-dev-chirp" → "~/dev/chirp").
+    /// Absolute decoded path for cwd matching (e.g. "-Users-jeff-dev-chirp" → "/Users/jeff/dev/chirp").
+    private static func decodedPath(_ dir: URL) -> String {
+        let encoded = dir.lastPathComponent
+        return "/" + encoded.replacingOccurrences(of: "-", with: "/").dropFirst()
+    }
+
+    /// Display path relative to home (e.g. "-Users-jeff-dev-chirp" → "~/dev/chirp").
     private static func projectPathFromDir(_ dir: URL) -> String {
-        let encoded = dir.lastPathComponent          // e.g. "-Users-jeff-dev-chirp"
+        let abs = decodedPath(dir)
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        // Convert "-Users-jeff-dev-chirp" → "/Users/jeff/dev/chirp"
-        let abs = "/" + encoded.replacingOccurrences(of: "-", with: "/").dropFirst()
         return abs.hasPrefix(home) ? "~" + abs.dropFirst(home.count) : abs
     }
 
