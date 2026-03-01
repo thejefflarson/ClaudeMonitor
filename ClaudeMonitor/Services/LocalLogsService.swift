@@ -71,11 +71,11 @@ enum LocalLogsService {
     }
 
     /// Returns one SessionInfo per running claude process, augmented with JSONL data.
-    static func activeSessions(withinSeconds: TimeInterval = 1800) -> [SessionInfo] {
+    static func activeSessions() -> [SessionInfo] {
         // Build JSONL index: sessionId → (file, projectPath, lastActivity)
         // Also reverse-index: absProjectPath → [(sessionId, file, lastActivity)]
-        var sessionFiles:   [String: (file: URL, projectPath: String, lastActivity: Date)] = [:]
-        var cwdToSessions:  [String: [(sessionId: String, file: URL, lastActivity: Date)]] = [:]
+        var sessionFiles:  [String: (file: URL, projectPath: String, lastActivity: Date)] = [:]
+        var cwdToSessions: [String: [(sessionId: String, file: URL, lastActivity: Date)]] = [:]
 
         if let projectDirs = try? FileManager.default.contentsOfDirectory(
             at: claudeProjectsDir, includingPropertiesForKeys: [.contentModificationDateKey]
@@ -86,13 +86,11 @@ enum LocalLogsService {
                 ).filter({ $0.pathExtension == "jsonl" }) else { continue }
 
                 let projectPath = projectPathFromDir(dir)
-                let absPath = dir.path  // real filesystem path for cwd matching
-
                 for file in jsonlFiles {
                     let sessionId = file.deletingPathExtension().lastPathComponent
                     let lastActivity = modDate(file)
                     sessionFiles[sessionId] = (file, projectPath, lastActivity)
-                    cwdToSessions[absPath, default: []].append((sessionId, file, lastActivity))
+                    cwdToSessions[dir.path, default: []].append((sessionId, file, lastActivity))
                 }
             }
         }
@@ -100,14 +98,12 @@ enum LocalLogsService {
         // Resolve running claude processes → session IDs
         let liveSessionIds = runningClaudeSessionIds(cwdToSessions: cwdToSessions)
 
-        // Build session list: live processes + recent JSONL activity as fallback
-        let recentCutoff = Date().addingTimeInterval(-withinSeconds)
         var seen = Set<String>()
         var sessions: [SessionInfo] = []
 
-        func addSession(sessionId: String) {
-            guard seen.insert(sessionId).inserted else { return }
-            guard let entry = sessionFiles[sessionId] else { return }
+        for sessionId in liveSessionIds {
+            guard seen.insert(sessionId).inserted,
+                  let entry = sessionFiles[sessionId] else { continue }
             let processing = entry.lastActivity > Date().addingTimeInterval(-15)
             let status = processing ? lastUserMessage(in: entry.file) : nil
             let tasks  = processing ? readTasks(sessionId: sessionId) : []
@@ -118,11 +114,6 @@ enum LocalLogsService {
                 inProgressTasks: tasks,
                 isProcessing: processing
             ))
-        }
-
-        for sessionId in liveSessionIds { addSession(sessionId: sessionId) }
-        for (sessionId, entry) in sessionFiles where entry.lastActivity > recentCutoff {
-            addSession(sessionId: sessionId)
         }
 
         return sessions.sorted { $0.lastActivity > $1.lastActivity }
@@ -170,20 +161,20 @@ enum LocalLogsService {
         return result
     }
 
-    /// Returns the working directory of a process via lsof.
+    /// Returns the working directory of a process via lsof (cwd only, fast).
     private static func processCwd(pid: String) -> String? {
         let lsof = Process()
         lsof.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        lsof.arguments = ["-p", pid]
+        lsof.arguments = ["-p", pid, "-a", "-d", "cwd", "-Fn"]
         let pipe = Pipe()
         lsof.standardOutput = pipe
         lsof.standardError = Pipe()
         guard (try? lsof.run()) != nil else { return nil }
         lsof.waitUntilExit()
         let text = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        // -Fn output: lines starting with 'n' are filenames
         for line in text.components(separatedBy: "\n") {
-            guard line.contains(" cwd ") else { continue }
-            return line.components(separatedBy: .whitespaces).last
+            if line.hasPrefix("n") { return String(line.dropFirst()) }
         }
         return nil
     }

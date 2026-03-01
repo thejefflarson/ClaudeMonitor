@@ -35,7 +35,7 @@ final class AppStore: ObservableObject {
         logsTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refreshSessions()
-                try? await Task.sleep(for: .seconds(5))
+                try? await Task.sleep(for: .seconds(2))
             }
         }
     }
@@ -46,6 +46,9 @@ final class AppStore: ObservableObject {
     }
 
     private func refreshSessions() async {
-        sessions = LocalLogsService.activeSessions()
+        let result = await Task.detached(priority: .utility) {
+            LocalLogsService.activeSessions()
+        }.value
+        sessions = result
     }
 }
