@@ -108,7 +108,8 @@ enum LocalLogsService {
             )
         }
 
-        // 2. Add any session with incomplete tasks (regardless of age)
+        // 2. Add sessions with incomplete tasks that were active within 24 hours
+        let taskCutoff = Date().addingTimeInterval(-86_400)
         if let taskSessionDirs = try? FileManager.default.contentsOfDirectory(
             at: claudeTasksDir, includingPropertiesForKeys: nil
         ) {
@@ -119,7 +120,7 @@ enum LocalLogsService {
                 let tasks = readTasks(sessionId: sessionId)
                 guard !tasks.isEmpty else { continue }
 
-                if let info = sessionIndex[sessionId] {
+                if let info = sessionIndex[sessionId], info.lastActivity > taskCutoff {
                     sessions[sessionId] = SessionInfo(
                         projectPath: info.projectPath,
                         lastActivity: info.lastActivity,
