@@ -11,7 +11,8 @@ enum LocalLogsService {
 
     /// Sums token usage and estimated cost for the current calendar month from local JSONL logs.
     static func monthlyUsage() -> UsageData {
-        let cal = Calendar.current
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
         let now = Date()
         let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: now))!
 
