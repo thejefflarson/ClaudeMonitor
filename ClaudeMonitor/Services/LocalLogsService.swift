@@ -198,16 +198,28 @@ enum LocalLogsService {
 
     /// True when Claude is actively working — either waiting to respond or mid-tool-execution.
     /// Skips tool_result lines (user-role but not human input).
-    /// Only returns false when we see a definitive assistant completion (end_turn / stop_sequence).
+    /// Uses stop_hook_summary as an authoritative "turn complete" signal: if one appears before
+    /// any message entry in the reversed scan, Claude has finished its turn regardless of
+    /// whether the last assistant message carried stop_reason=end_turn (Sonnet 4.x omits it).
     private static func isAwaitingResponse(in file: URL) -> Bool {
         guard let text = try? String(contentsOf: file, encoding: .utf8) else { return false }
         for line in text.components(separatedBy: "\n").reversed() {
             guard !line.isEmpty,
                   let data = line.data(using: .utf8),
-                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let msg = obj["message"] as? [String: Any],
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { continue }
+
+            // stop_hook_summary is written by Claude Code after each completed turn.
+            // If we encounter it before any message entry, the turn is done.
+            if obj["type"] as? String == "system",
+               obj["subtype"] as? String == "stop_hook_summary" {
+                return false
+            }
+
+            guard let msg = obj["message"] as? [String: Any],
                   let role = msg["role"] as? String
             else { continue }
+
             if role == "user" {
                 // Skip tool_result entries — they're user-role but not human input
                 if let blocks = msg["content"] as? [[String: Any]],
@@ -220,7 +232,7 @@ enum LocalLogsService {
             if role == "assistant" {
                 let stopReason = msg["stop_reason"] as? String
                 // tool_use → Claude is still running tools; nil → mid-stream write; both = active.
-                // Only end_turn / stop_sequence mean Claude has truly finished.
+                // end_turn / stop_sequence → done (older Claude Code versions set this explicitly).
                 return stopReason == "tool_use" || stopReason == nil
             }
         }
