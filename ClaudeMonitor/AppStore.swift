@@ -10,6 +10,9 @@ final class AppStore: ObservableObject {
     private var logsTask: Task<Void, Never>?
     private let socketListener = UnixSocketListener()
 
+    /// Tracks the last time iTerm2 was focused per session, to debounce rapid re-fires.
+    private var lastFocused: [String: Date] = [:]
+
     init() {
         UserDefaults.standard.register(defaults: ["iterm2FocusEnabled": true])
         HookInstaller.installIfNeeded()
@@ -19,6 +22,9 @@ final class AppStore: ObservableObject {
         }
         socketListener.onCompact = { [weak self] (event: CompactEvent) in
             self?.handleCompactEvent(event)
+        }
+        socketListener.onNotification = { [weak self] event in
+            self?.handleNotificationEvent(event)
         }
         socketListener.start()
 
@@ -70,6 +76,13 @@ final class AppStore: ObservableObject {
         sessions = result
     }
 
+    private func maybeFireFocus(for sessionId: String, path: String) {
+        let now = Date()
+        if let last = lastFocused[sessionId], now.timeIntervalSince(last) < 5 { return }
+        lastFocused[sessionId] = now
+        Task.detached { ITerm2FocusService.focusSession(projectPath: path) }
+    }
+
     /// Called immediately when a PreCompact hook fires — Claude is about to compact context.
     private func handleCompactEvent(_ event: CompactEvent) {
         if let idx = sessions.firstIndex(where: { $0.id == event.sessionId }) {
@@ -77,6 +90,16 @@ final class AppStore: ObservableObject {
             sessions[idx].isProcessing = false
             sessions[idx].currentStatus = nil
         }
+    }
+
+    /// Called when a Notification hook fires — covers permission_prompt and idle_prompt.
+    private func handleNotificationEvent(_ event: NotificationEvent) {
+        guard UserDefaults.standard.bool(forKey: "iterm2FocusEnabled") else { return }
+        guard event.notificationType == "permission_prompt" || event.notificationType == "idle_prompt"
+        else { return }
+        let session = sessions.first { $0.id == event.sessionId }
+        guard let session else { return }
+        maybeFireFocus(for: session.id, path: session.projectPath)
     }
 
     /// Called immediately when a Stop hook fires via Unix socket.
@@ -91,8 +114,8 @@ final class AppStore: ObservableObject {
         guard UserDefaults.standard.bool(forKey: "iterm2FocusEnabled") else { return }
         let session = sessions.first { $0.id == event.sessionId }
             ?? sessions.first { $0.projectPath == event.cwd.map(projectPathFromCwd) }
-        guard let path = session?.projectPath else { return }
-        Task.detached { ITerm2FocusService.focusSession(projectPath: path) }
+        guard let session else { return }
+        maybeFireFocus(for: session.id, path: session.projectPath)
     }
 
     private func projectPathFromCwd(_ cwd: String) -> String {

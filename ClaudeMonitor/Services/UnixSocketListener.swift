@@ -10,13 +10,20 @@ struct CompactEvent {
     let trigger: String   // "auto" or "manual"
 }
 
-/// Listens on a Unix domain socket for Claude Code hook payloads (Stop and PreCompact).
+struct NotificationEvent {
+    let sessionId: String
+    let notificationType: String  // "permission_prompt", "idle_prompt", "auth_success", etc.
+    let message: String
+}
+
+/// Listens on a Unix domain socket for Claude Code hook payloads (Stop, PreCompact, Notification).
 /// Hook command (auto-installed by HookInstaller): the ClaudeMonitorHook binary.
 final class UnixSocketListener {
     static let socketPath = "/tmp/com.jeffl.es.ClaudeMonitor.sock"
 
     var onStop: ((StopEvent) -> Void)?
     var onCompact: ((CompactEvent) -> Void)?
+    var onNotification: ((NotificationEvent) -> Void)?
 
     private var serverFd: Int32 = -1
     private let queue = DispatchQueue(label: "com.jeffl.es.ClaudeMonitor.socket", qos: .utility)
@@ -78,8 +85,14 @@ final class UnixSocketListener {
               let sessionId = json["session_id"] as? String
         else { return }
 
-        // PreCompact payload has a "trigger" field; Stop payload has "stop_hook_active".
-        if let trigger = json["trigger"] as? String {
+        // Route by hook_event_name when present, fall back to field-based detection.
+        let eventName = json["hook_event_name"] as? String
+        if eventName == "Notification", let message = json["message"] as? String {
+            let notifType = json["notification_type"] as? String ?? ""
+            let event = NotificationEvent(sessionId: sessionId, notificationType: notifType, message: message)
+            DispatchQueue.main.async { [weak self] in self?.onNotification?(event) }
+        } else if eventName == "PreCompact" || json["trigger"] is String {
+            let trigger = json["trigger"] as? String ?? ""
             let event = CompactEvent(sessionId: sessionId, trigger: trigger)
             DispatchQueue.main.async { [weak self] in self?.onCompact?(event) }
         } else {

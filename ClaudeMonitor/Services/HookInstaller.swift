@@ -45,8 +45,8 @@ enum HookInstaller {
 
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
 
-        // Install our binary for both Stop and PreCompact events.
-        for eventName in ["Stop", "PreCompact"] {
+        // Install our binary for Stop, PreCompact, and Notification events.
+        for eventName in ["Stop", "PreCompact", "Notification"] {
             var groups = hooks[eventName] as? [[String: Any]] ?? []
 
             // Remove any previous hook from us (old shell-script style or binary style).
