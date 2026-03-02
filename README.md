@@ -15,6 +15,20 @@ A macOS menu bar app that monitors your [Claude Code](https://claude.ai/code) se
 
 All data is read locally. The app makes no network requests.
 
+## Install
+
+Download the latest `ClaudeMonitor.zip` from [Releases](https://github.com/thejefflarson/ClaudeMonitor/releases), unzip, and drag **ClaudeMonitor.app** to `/Applications`.
+
+On first launch macOS may block it since it's not notarized. To allow it:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/ClaudeMonitor.app
+```
+
+Then open it normally. The app installs its hooks into `~/.claude/settings.json` automatically on launch.
+
+---
+
 ## Requirements
 
 - macOS 13+
