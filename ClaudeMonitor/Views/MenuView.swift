@@ -38,7 +38,8 @@ struct MenuView: View {
                 }
 
                 if let start = store.usage.periodStart {
-                    Text("\(start.formatted(.dateTime.month(.wide).day())) – \(Date().formatted(.dateTime.month(.wide).day()))")
+                    let utcStyle = Date.FormatStyle(timeZone: TimeZone(identifier: "UTC")!).month(.wide).day()
+                    Text("\(start.formatted(utcStyle)) – \(Date().formatted(utcStyle))")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .padding(.top, 1)
