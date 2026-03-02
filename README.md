@@ -46,10 +46,10 @@ xcodebuild test -scheme ClaudeMonitor -destination 'platform=macOS'
 
 ## Personalisation
 
-The project uses `com.jeff` as the bundle ID prefix. If you're building your own copy, update these before signing:
+The project uses `com.jeffl.es` as the bundle ID prefix. If you're building your own copy, update these before signing:
 
 - **`project.yml`** — `bundleIdPrefix` and both `PRODUCT_BUNDLE_IDENTIFIER` values
-- **`UnixSocketListener.swift`** — `socketPath` (`/tmp/com.jeff.ClaudeMonitor.sock`)
+- **`UnixSocketListener.swift`** — `socketPath` (`/tmp/com.jeffl.es.ClaudeMonitor.sock`)
 
 The hook helper is installed to `~/.claude/monitor/notify` regardless of bundle ID.
 

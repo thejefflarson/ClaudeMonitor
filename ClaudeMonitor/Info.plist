@@ -5,7 +5,7 @@
     <key>CFBundleName</key>
     <string>ClaudeMonitor</string>
     <key>CFBundleIdentifier</key>
-    <string>com.jeff.ClaudeMonitor</string>
+    <string>com.jeffl.es.ClaudeMonitor</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>

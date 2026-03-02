@@ -2,7 +2,7 @@
 // Claude Code pipes a JSON payload to stdin; we forward it to the app via Unix socket.
 import Foundation
 
-let socketPath = "/tmp/com.jeff.ClaudeMonitor.sock"
+let socketPath = "/tmp/com.jeffl.es.ClaudeMonitor.sock"
 
 let data = FileHandle.standardInput.readDataToEndOfFile()
 guard !data.isEmpty else { exit(0) }

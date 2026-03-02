@@ -12,6 +12,7 @@ ClaudeMonitor.xcodeproj/xcuserdata/
 
 # Claude Code agent files (personal memory, plans, transcripts)
 .claude/
+docs/plans/
 
 # macOS
 .DS_Store

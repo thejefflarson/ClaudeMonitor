@@ -13,13 +13,13 @@ struct CompactEvent {
 /// Listens on a Unix domain socket for Claude Code hook payloads (Stop and PreCompact).
 /// Hook command (auto-installed by HookInstaller): the ClaudeMonitorHook binary.
 final class UnixSocketListener {
-    static let socketPath = "/tmp/com.jeff.ClaudeMonitor.sock"
+    static let socketPath = "/tmp/com.jeffl.es.ClaudeMonitor.sock"
 
     var onStop: ((StopEvent) -> Void)?
     var onCompact: ((CompactEvent) -> Void)?
 
     private var serverFd: Int32 = -1
-    private let queue = DispatchQueue(label: "com.jeff.ClaudeMonitor.socket", qos: .utility)
+    private let queue = DispatchQueue(label: "com.jeffl.es.ClaudeMonitor.socket", qos: .utility)
 
     func start() {
         queue.async { [weak self] in self?.run() }

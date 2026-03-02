@@ -354,7 +354,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.jeff.ClaudeMonitorTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeffl.es.ClaudeMonitorTests;
 				SDKROOT = macosx;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ClaudeMonitor.app/Contents/MacOS/ClaudeMonitor";
 			};
@@ -368,7 +368,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.jeff.ClaudeMonitorHook;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeffl.es.ClaudeMonitorHook;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.9;
 			};
@@ -438,7 +438,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.jeff.ClaudeMonitorHook;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeffl.es.ClaudeMonitorHook;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.9;
 			};
@@ -455,7 +455,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.jeff.ClaudeMonitorTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeffl.es.ClaudeMonitorTests;
 				SDKROOT = macosx;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ClaudeMonitor.app/Contents/MacOS/ClaudeMonitor";
 			};
@@ -474,7 +474,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.jeff.ClaudeMonitor;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeffl.es.ClaudeMonitor;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.9;
 			};
@@ -556,7 +556,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.jeff.ClaudeMonitor;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeffl.es.ClaudeMonitor;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.9;
 			};
