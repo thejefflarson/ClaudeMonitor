@@ -14,5 +14,8 @@ struct ClaudeMonitorApp: App {
         }
         .menuBarExtraStyle(.window)
 
+        Settings {
+            PreferencesView()
+        }
     }
 }

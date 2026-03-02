@@ -8,19 +8,18 @@
 
 /* Begin PBXBuildFile section */
 		1840B52F036FC63A479706A7 /* sample_session.jsonl in Resources */ = {isa = PBXBuildFile; fileRef = 0870310A582BBA5E78B9D365 /* sample_session.jsonl */; };
+		379271A8532D6AD774CA8692 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24DDAF72C9A60FB08D698AA /* main.swift */; };
 		3A3081D9186196489CB27A8C /* ModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26E1B04096D849B011ED370F /* ModelsTests.swift */; };
 		3E9978D085266F4266F54A4A /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B670286CE8808DA9BCABC600 /* AppStore.swift */; };
 		3F7FC26C0D4F73C98182A88E /* LocalLogsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DB9F0B7AB9F17D1A45F66CE /* LocalLogsService.swift */; };
 		6D1E9FFFB95081492D5A91F7 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4B70BFAA4A1F54F31F1769B /* PreferencesView.swift */; };
-		6E440798716F5AD473B3703B /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0D7DBF51B57A2ED37798925 /* KeychainHelper.swift */; };
-		7FFE4C0F5F8F9D4E7F5AB4B1 /* AnthropicServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53C7246107DC33F54516356A /* AnthropicServiceTests.swift */; };
 		82B4A30B9CF969BA05030DDA /* ClaudeMonitorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0FB52122C9A94A475FA81B /* ClaudeMonitorApp.swift */; };
+		A2A97DCFBF65FDF628610B6D /* HookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = E95259972DE9EE6D0517AFB4 /* HookInstaller.swift */; };
+		A9AC9AB4FDE42063C6FD1DF5 /* UnixSocketListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = D19A94C122F7CFD586C4AA5D /* UnixSocketListener.swift */; };
 		B1273253308476DBA92ED42D /* LocalLogsServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36DADF2FC9CDEAA1B21749D4 /* LocalLogsServiceTests.swift */; };
-		B19A20CBBA1EC50C5213612F /* AnthropicService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44533B4F86C062DDA8F00F63 /* AnthropicService.swift */; };
-		B87F6E7A43FA8A6A3647EE22 /* PlaceholderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98C4BF1BFCCB656F0C5793ED /* PlaceholderTests.swift */; };
 		BD1CAF4EC60A46D03FF97D2C /* SessionInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F1299490C4B82E6DFAF2D8 /* SessionInfo.swift */; };
-		DD0F5F2E1014037CF1D853C3 /* KeychainHelperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A558ACCAA3448D93A0C506A /* KeychainHelperTests.swift */; };
 		E69C8C56170B983F24C7E940 /* UsageData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E078C009D1D0F065DA208504 /* UsageData.swift */; };
+		ED6C323A77AF9F2653597CE6 /* ITerm2FocusService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDE2BBB607EF6B41668CD2E7 /* ITerm2FocusService.swift */; };
 		EE76017973D97193555440DD /* TaskItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E8226112F4A717B2983EB58 /* TaskItem.swift */; };
 		F9071C1440DB9E55B28B7CC0 /* MenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11550C7AEDE26A33A2AE29AA /* MenuView.swift */; };
 /* End PBXBuildFile section */
@@ -33,44 +32,44 @@
 			remoteGlobalIDString = 1BA94E0C01D277A3D97D540D;
 			remoteInfo = ClaudeMonitor;
 		};
+		A14326A3B4023F8BC5C0810A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0A1C0F0A567689AF0C10104F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 326466C2FD1FBA15C161F56F;
+			remoteInfo = ClaudeMonitorHook;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		01E69CD8161F734BE0624EC4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0870310A582BBA5E78B9D365 /* sample_session.jsonl */ = {isa = PBXFileReference; path = sample_session.jsonl; sourceTree = "<group>"; };
 		11550C7AEDE26A33A2AE29AA /* MenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuView.swift; sourceTree = "<group>"; };
-		1A558ACCAA3448D93A0C506A /* KeychainHelperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelperTests.swift; sourceTree = "<group>"; };
 		26E1B04096D849B011ED370F /* ModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsTests.swift; sourceTree = "<group>"; };
 		36DADF2FC9CDEAA1B21749D4 /* LocalLogsServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLogsServiceTests.swift; sourceTree = "<group>"; };
-		44533B4F86C062DDA8F00F63 /* AnthropicService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicService.swift; sourceTree = "<group>"; };
-		53C7246107DC33F54516356A /* AnthropicServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicServiceTests.swift; sourceTree = "<group>"; };
 		7DB9F0B7AB9F17D1A45F66CE /* LocalLogsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLogsService.swift; sourceTree = "<group>"; };
 		7E8226112F4A717B2983EB58 /* TaskItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskItem.swift; sourceTree = "<group>"; };
 		86F1299490C4B82E6DFAF2D8 /* SessionInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionInfo.swift; sourceTree = "<group>"; };
-		98C4BF1BFCCB656F0C5793ED /* PlaceholderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceholderTests.swift; sourceTree = "<group>"; };
 		9924D1F6FBFD4F220629C2E2 /* ClaudeMonitor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeMonitor.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9AF0E72C1AC0B6AAAD6E7DA4 /* ClaudeMonitorHook */ = {isa = PBXFileReference; includeInIndex = 0; path = ClaudeMonitorHook; sourceTree = BUILT_PRODUCTS_DIR; };
 		A694C018F13572E6F47C48F2 /* ClaudeMonitorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudeMonitorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B670286CE8808DA9BCABC600 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
+		CDE2BBB607EF6B41668CD2E7 /* ITerm2FocusService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ITerm2FocusService.swift; sourceTree = "<group>"; };
+		D19A94C122F7CFD586C4AA5D /* UnixSocketListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnixSocketListener.swift; sourceTree = "<group>"; };
 		DC0FB52122C9A94A475FA81B /* ClaudeMonitorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeMonitorApp.swift; sourceTree = "<group>"; };
 		E078C009D1D0F065DA208504 /* UsageData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageData.swift; sourceTree = "<group>"; };
-		E0D7DBF51B57A2ED37798925 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 		E4B70BFAA4A1F54F31F1769B /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
+		E95259972DE9EE6D0517AFB4 /* HookInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookInstaller.swift; sourceTree = "<group>"; };
+		F24DDAF72C9A60FB08D698AA /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		F9FAF0667A4500690AC14250 /* ClaudeMonitor.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClaudeMonitor.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
-		00E9D73B047DA701E4BB1FCD /* Helpers */ = {
-			isa = PBXGroup;
-			children = (
-				1A558ACCAA3448D93A0C506A /* KeychainHelperTests.swift */,
-			);
-			path = Helpers;
-			sourceTree = "<group>";
-		};
 		07E8AC954CB3FA5879910A53 = {
 			isa = PBXGroup;
 			children = (
 				11452B26FD3B2ECC361A087F /* ClaudeMonitor */,
+				170BDD7644D829CC38491800 /* ClaudeMonitorHook */,
 				311BD7B42B2F2945365797FE /* ClaudeMonitorTests */,
 				652D67D252F283B04AFEF569 /* Products */,
 			);
@@ -83,7 +82,6 @@
 				F9FAF0667A4500690AC14250 /* ClaudeMonitor.entitlements */,
 				DC0FB52122C9A94A475FA81B /* ClaudeMonitorApp.swift */,
 				01E69CD8161F734BE0624EC4 /* Info.plist */,
-				D5E0A1064560FA971ACFA939 /* Helpers */,
 				8FE5A11B85B356912D46F642 /* Models */,
 				555DA2D1CBEFC9F5A7001404 /* Services */,
 				F306DC68CADA93A24AB05228 /* Views */,
@@ -91,12 +89,18 @@
 			path = ClaudeMonitor;
 			sourceTree = "<group>";
 		};
+		170BDD7644D829CC38491800 /* ClaudeMonitorHook */ = {
+			isa = PBXGroup;
+			children = (
+				F24DDAF72C9A60FB08D698AA /* main.swift */,
+			);
+			path = ClaudeMonitorHook;
+			sourceTree = "<group>";
+		};
 		311BD7B42B2F2945365797FE /* ClaudeMonitorTests */ = {
 			isa = PBXGroup;
 			children = (
-				98C4BF1BFCCB656F0C5793ED /* PlaceholderTests.swift */,
 				F048621213A5311C0343125A /* Fixtures */,
-				00E9D73B047DA701E4BB1FCD /* Helpers */,
 				CE97187960D055638EB956A8 /* Models */,
 				6CA3A8F1EA2B0DC1B153883F /* Services */,
 			);
@@ -106,8 +110,10 @@
 		555DA2D1CBEFC9F5A7001404 /* Services */ = {
 			isa = PBXGroup;
 			children = (
-				44533B4F86C062DDA8F00F63 /* AnthropicService.swift */,
+				E95259972DE9EE6D0517AFB4 /* HookInstaller.swift */,
+				CDE2BBB607EF6B41668CD2E7 /* ITerm2FocusService.swift */,
 				7DB9F0B7AB9F17D1A45F66CE /* LocalLogsService.swift */,
+				D19A94C122F7CFD586C4AA5D /* UnixSocketListener.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -116,6 +122,7 @@
 			isa = PBXGroup;
 			children = (
 				9924D1F6FBFD4F220629C2E2 /* ClaudeMonitor.app */,
+				9AF0E72C1AC0B6AAAD6E7DA4 /* ClaudeMonitorHook */,
 				A694C018F13572E6F47C48F2 /* ClaudeMonitorTests.xctest */,
 			);
 			name = Products;
@@ -124,7 +131,6 @@
 		6CA3A8F1EA2B0DC1B153883F /* Services */ = {
 			isa = PBXGroup;
 			children = (
-				53C7246107DC33F54516356A /* AnthropicServiceTests.swift */,
 				36DADF2FC9CDEAA1B21749D4 /* LocalLogsServiceTests.swift */,
 			);
 			path = Services;
@@ -146,14 +152,6 @@
 				26E1B04096D849B011ED370F /* ModelsTests.swift */,
 			);
 			path = Models;
-			sourceTree = "<group>";
-		};
-		D5E0A1064560FA971ACFA939 /* Helpers */ = {
-			isa = PBXGroup;
-			children = (
-				E0D7DBF51B57A2ED37798925 /* KeychainHelper.swift */,
-			);
-			path = Helpers;
 			sourceTree = "<group>";
 		};
 		F048621213A5311C0343125A /* Fixtures */ = {
@@ -200,10 +198,12 @@
 			buildConfigurationList = 458C8ECDDDF94448F9073656 /* Build configuration list for PBXNativeTarget "ClaudeMonitor" */;
 			buildPhases = (
 				E78E550434E6FDA8035F8938 /* Sources */,
+				EF74676F4230AD226EFCAC4E /* Embed ClaudeMonitorHook */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				323FB64B9B4DAA57B3A7762F /* PBXTargetDependency */,
 			);
 			name = ClaudeMonitor;
 			packageProductDependencies = (
@@ -211,6 +211,23 @@
 			productName = ClaudeMonitor;
 			productReference = 9924D1F6FBFD4F220629C2E2 /* ClaudeMonitor.app */;
 			productType = "com.apple.product-type.application";
+		};
+		326466C2FD1FBA15C161F56F /* ClaudeMonitorHook */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7DAFC92F5FB10E6C3D96C573 /* Build configuration list for PBXNativeTarget "ClaudeMonitorHook" */;
+			buildPhases = (
+				ABE4C2F073A3A39328E800F4 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ClaudeMonitorHook;
+			packageProductDependencies = (
+			);
+			productName = ClaudeMonitorHook;
+			productReference = 9AF0E72C1AC0B6AAAD6E7DA4 /* ClaudeMonitorHook */;
+			productType = "com.apple.product-type.tool";
 		};
 /* End PBXNativeTarget section */
 
@@ -236,6 +253,7 @@
 			projectRoot = "";
 			targets = (
 				1BA94E0C01D277A3D97D540D /* ClaudeMonitor */,
+				326466C2FD1FBA15C161F56F /* ClaudeMonitorHook */,
 				091C5C1335A1B8233823998D /* ClaudeMonitorTests */,
 			);
 		};
@@ -252,16 +270,42 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		EF74676F4230AD226EFCAC4E /* Embed ClaudeMonitorHook */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed ClaudeMonitorHook";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "src=\"${BUILT_PRODUCTS_DIR}/ClaudeMonitorHook\"\ndst=\"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/MacOS/ClaudeMonitorHook\"\n[ -f \"$src\" ] && cp \"$src\" \"$dst\" || true\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
+		ABE4C2F073A3A39328E800F4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				379271A8532D6AD774CA8692 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B77504D3B0D5AA8B2E0265C0 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7FFE4C0F5F8F9D4E7F5AB4B1 /* AnthropicServiceTests.swift in Sources */,
-				DD0F5F2E1014037CF1D853C3 /* KeychainHelperTests.swift in Sources */,
 				B1273253308476DBA92ED42D /* LocalLogsServiceTests.swift in Sources */,
 				3A3081D9186196489CB27A8C /* ModelsTests.swift in Sources */,
-				B87F6E7A43FA8A6A3647EE22 /* PlaceholderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -269,15 +313,16 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B19A20CBBA1EC50C5213612F /* AnthropicService.swift in Sources */,
 				3E9978D085266F4266F54A4A /* AppStore.swift in Sources */,
 				82B4A30B9CF969BA05030DDA /* ClaudeMonitorApp.swift in Sources */,
-				6E440798716F5AD473B3703B /* KeychainHelper.swift in Sources */,
+				A2A97DCFBF65FDF628610B6D /* HookInstaller.swift in Sources */,
+				ED6C323A77AF9F2653597CE6 /* ITerm2FocusService.swift in Sources */,
 				3F7FC26C0D4F73C98182A88E /* LocalLogsService.swift in Sources */,
 				F9071C1440DB9E55B28B7CC0 /* MenuView.swift in Sources */,
 				6D1E9FFFB95081492D5A91F7 /* PreferencesView.swift in Sources */,
 				BD1CAF4EC60A46D03FF97D2C /* SessionInfo.swift in Sources */,
 				EE76017973D97193555440DD /* TaskItem.swift in Sources */,
+				A9AC9AB4FDE42063C6FD1DF5 /* UnixSocketListener.swift in Sources */,
 				E69C8C56170B983F24C7E940 /* UsageData.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -285,6 +330,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		323FB64B9B4DAA57B3A7762F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 326466C2FD1FBA15C161F56F /* ClaudeMonitorHook */;
+			targetProxy = A14326A3B4023F8BC5C0810A /* PBXContainerItemProxy */;
+		};
 		7CBE7F53FD9FC7C6BA5D7010 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 1BA94E0C01D277A3D97D540D /* ClaudeMonitor */;
@@ -309,6 +359,20 @@
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ClaudeMonitor.app/Contents/MacOS/ClaudeMonitor";
 			};
 			name = Debug;
+		};
+		2C0BA023625CBC6A00162146 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeff.ClaudeMonitorHook;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
 		};
 		3EF77ACB0B5E5F63E0DAFA8B /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -365,6 +429,20 @@
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
+		};
+		59951202C9DE030A23A3E433 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeff.ClaudeMonitorHook;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
 		};
 		9D873ACD7BE6BE94F1B708E9 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -501,6 +579,15 @@
 			buildConfigurations = (
 				A6D424770AF4D1C3075DBB29 /* Debug */,
 				EC9361A84503F5A6B508FC8B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7DAFC92F5FB10E6C3D96C573 /* Build configuration list for PBXNativeTarget "ClaudeMonitorHook" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				59951202C9DE030A23A3E433 /* Debug */,
+				2C0BA023625CBC6A00162146 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

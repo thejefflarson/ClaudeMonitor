@@ -10,6 +10,16 @@ targets:
     platform: macOS
     sources:
       - ClaudeMonitor
+    dependencies:
+      - target: ClaudeMonitorHook
+        embed: false
+        link: false
+    postCompileScripts:
+      - name: Embed ClaudeMonitorHook
+        script: |
+          src="${BUILT_PRODUCTS_DIR}/ClaudeMonitorHook"
+          dst="${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/MacOS/ClaudeMonitorHook"
+          [ -f "$src" ] && cp "$src" "$dst" || true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jeff.ClaudeMonitor
@@ -18,6 +28,17 @@ targets:
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.9"
+
+  ClaudeMonitorHook:
+    type: tool
+    platform: macOS
+    sources:
+      - ClaudeMonitorHook
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jeff.ClaudeMonitorHook
+        SWIFT_VERSION: "5.9"
+
   ClaudeMonitorTests:
     type: bundle.unit-test
     platform: macOS

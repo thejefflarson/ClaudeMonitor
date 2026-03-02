@@ -1,11 +1,22 @@
 import Foundation
 
 enum LocalLogsService {
-    private static let claudeDir = FileManager.default
-        .homeDirectoryForCurrentUser
-        .appendingPathComponent(".claude")
-    private static let claudeProjectsDir = claudeDir.appendingPathComponent("projects")
-    private static let claudeTasksDir    = claudeDir.appendingPathComponent("tasks")
+    private static let home = FileManager.default.homeDirectoryForCurrentUser
+
+    /// All existing Claude config roots (~/.claude and/or ~/.config/claude).
+    private static var claudeRoots: [URL] {
+        [home.appendingPathComponent(".claude"),
+         home.appendingPathComponent(".config/claude")]
+            .filter { isDir($0) }
+    }
+
+    private static var projectsDirs: [URL] { claudeRoots.map { $0.appendingPathComponent("projects") }.filter { isDir($0) } }
+    private static var tasksDirs:    [URL] { claudeRoots.map { $0.appendingPathComponent("tasks")    }.filter { isDir($0) } }
+
+    private static func isDir(_ url: URL) -> Bool {
+        var d: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &d) && d.boolValue
+    }
 
     // MARK: - Public API
 
@@ -16,10 +27,6 @@ enum LocalLogsService {
         let now = Date()
         let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: now))!
 
-        guard let projectDirs = try? FileManager.default.contentsOfDirectory(
-            at: claudeProjectsDir, includingPropertiesForKeys: [.contentModificationDateKey]
-        ) else { return UsageData() }
-
         var totalTokens = 0
         var totalCost = 0.0
 
@@ -27,7 +34,11 @@ enum LocalLogsService {
         isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let isoBasic = ISO8601DateFormatter()
 
-        for dir in projectDirs where dir.hasDirectoryPath {
+        let allProjectDirs = projectsDirs.flatMap {
+            (try? FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        }
+
+        for dir in allProjectDirs where dir.hasDirectoryPath {
             guard modDate(dir) > monthStart else { continue }
             guard let files = try? FileManager.default.contentsOfDirectory(
                 at: dir, includingPropertiesForKeys: [.contentModificationDateKey]
@@ -77,22 +88,21 @@ enum LocalLogsService {
         var sessionFiles:  [String: (file: URL, projectPath: String, lastActivity: Date)] = [:]
         var cwdToSessions: [String: [(sessionId: String, file: URL, lastActivity: Date)]] = [:]
 
-        if let projectDirs = try? FileManager.default.contentsOfDirectory(
-            at: claudeProjectsDir, includingPropertiesForKeys: [.contentModificationDateKey]
-        ) {
-            for dir in projectDirs where dir.hasDirectoryPath {
-                guard let jsonlFiles = try? FileManager.default.contentsOfDirectory(
-                    at: dir, includingPropertiesForKeys: [.contentModificationDateKey]
-                ).filter({ $0.pathExtension == "jsonl" }) else { continue }
+        let allProjectDirs = projectsDirs.flatMap {
+            (try? FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        }
+        for dir in allProjectDirs where dir.hasDirectoryPath {
+            guard let jsonlFiles = try? FileManager.default.contentsOfDirectory(
+                at: dir, includingPropertiesForKeys: [.contentModificationDateKey]
+            ).filter({ $0.pathExtension == "jsonl" }) else { continue }
 
-                let projectPath = projectPathFromDir(dir)
-                let decodedCwd = decodedPath(dir)   // e.g. /Users/jeff/dev/monitor
-                for file in jsonlFiles {
-                    let sessionId = file.deletingPathExtension().lastPathComponent
-                    let lastActivity = modDate(file)
-                    sessionFiles[sessionId] = (file, projectPath, lastActivity)
-                    cwdToSessions[decodedCwd, default: []].append((sessionId, file, lastActivity))
-                }
+            let projectPath = projectPathFromDir(dir)
+            let decodedCwd = decodedPath(dir)
+            for file in jsonlFiles {
+                let sessionId = file.deletingPathExtension().lastPathComponent
+                let lastActivity = modDate(file)
+                sessionFiles[sessionId] = (file, projectPath, lastActivity)
+                cwdToSessions[decodedCwd, default: []].append((sessionId, file, lastActivity))
             }
         }
 
@@ -105,14 +115,13 @@ enum LocalLogsService {
         for sessionId in liveSessionIds {
             guard seen.insert(sessionId).inserted,
                   let entry = sessionFiles[sessionId] else { continue }
-            let processing = entry.lastActivity > Date().addingTimeInterval(-15)
-            let status = processing ? lastUserMessage(in: entry.file) : nil
-            let tasks  = processing ? readTasks(sessionId: sessionId) : []
+            let processing = isAwaitingResponse(in: entry.file)
             sessions.append(SessionInfo(
+                id: sessionId,
                 projectPath: entry.projectPath,
                 lastActivity: entry.lastActivity,
-                currentStatus: status,
-                inProgressTasks: tasks,
+                currentStatus: processing ? lastMessage(in: entry.file) : nil,
+                inProgressTasks: readTasks(sessionId: sessionId),
                 isProcessing: processing
             ))
         }
@@ -121,6 +130,8 @@ enum LocalLogsService {
     }
 
     /// Returns session IDs of all running `claude` processes using native kernel APIs.
+    /// Always uses CWD-based matching and picks the most recently modified JSONL in the
+    /// project dir — --resume points to the pre-compaction session, not the live one.
     private static func runningClaudeSessionIds(
         cwdToSessions: [String: [(sessionId: String, file: URL, lastActivity: Date)]]
     ) -> [String] {
@@ -136,51 +147,17 @@ enum LocalLogsService {
             let pid = pids[i]
             guard pid > 0 else { continue }
 
-            // Identify claude processes by executable path
             pathBuf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
             guard proc_pidpath(pid, &pathBuf, UInt32(MAXPATHLEN)) > 0 else { continue }
             let execPath = String(cString: pathBuf)
             guard execPath.contains("/claude/versions/") || execPath.hasSuffix("/claude") else { continue }
 
-            // Try to extract --resume <sessionId> from args
-            if let sessionId = resumeSessionId(pid: pid) {
-                result.append(sessionId)
-            } else if let cwd = processCwd(pid: pid),
-                      let sessions = cwdToSessions[cwd],
-                      let newest = sessions.max(by: { $0.lastActivity < $1.lastActivity }) {
+            if let cwd = processCwd(pid: pid),
+               let newest = cwdToSessions[cwd]?.max(by: { $0.lastActivity < $1.lastActivity }) {
                 result.append(newest.sessionId)
             }
         }
         return result
-    }
-
-    /// Extracts the --resume session ID from a process's args via sysctl KERN_PROCARGS2.
-    private static func resumeSessionId(pid: pid_t) -> String? {
-        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
-        var size = 0
-        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 4 else { return nil }
-        var buf = [UInt8](repeating: 0, count: size)
-        guard sysctl(&mib, 3, &buf, &size, nil, 0) == 0 else { return nil }
-
-        // Layout: [int32 argc][exec path\0][null padding][arg0\0][arg1\0]...
-        let argc = Int(buf.withUnsafeBytes { $0.load(as: Int32.self) })
-        var pos = 4
-        while pos < size && buf[pos] != 0 { pos += 1 }  // skip exec path
-        while pos < size && buf[pos] == 0 { pos += 1 }  // skip null padding
-
-        var args: [String] = []
-        for _ in 0..<argc {
-            var end = pos
-            while end < size && buf[end] != 0 { end += 1 }
-            if let s = String(bytes: buf[pos..<end], encoding: .utf8) { args.append(s) }
-            pos = end + 1
-            if pos >= size { break }
-        }
-
-        if let idx = args.firstIndex(of: "--resume"), idx + 1 < args.count {
-            return args[idx + 1]
-        }
-        return nil
     }
 
     /// Returns the working directory of a process via proc_pidinfo PROC_PIDVNODEPATHINFO.
@@ -199,9 +176,10 @@ enum LocalLogsService {
 
     // MARK: - Private helpers
 
-    /// Reads task state directly from ~/.claude/tasks/{sessionId}/*.json
+    /// Reads task state from {tasksDir}/{sessionId}/*.json across all config roots.
     private static func readTasks(sessionId: String) -> [TaskItem] {
-        let dir = claudeTasksDir.appendingPathComponent(sessionId)
+        let dirs = tasksDirs.map { $0.appendingPathComponent(sessionId) }
+        guard let dir = dirs.first(where: { isDir($0) }) else { return [] }
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: nil
         ).filter({ $0.pathExtension == "json" }) else { return [] }
@@ -218,20 +196,52 @@ enum LocalLogsService {
         }.sorted { (Int($0.id) ?? 0) < (Int($1.id) ?? 0) }
     }
 
-    /// Reads the last user-typed message from a JSONL session file.
-    private static func lastUserMessage(in file: URL) -> String? {
+    /// True when Claude is actively working — either waiting to respond or mid-tool-execution.
+    /// Skips tool_result lines (user-role but not human input).
+    /// Only returns false when we see a definitive assistant completion (end_turn / stop_sequence).
+    private static func isAwaitingResponse(in file: URL) -> Bool {
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return false }
+        for line in text.components(separatedBy: "\n").reversed() {
+            guard !line.isEmpty,
+                  let data = line.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let msg = obj["message"] as? [String: Any],
+                  let role = msg["role"] as? String
+            else { continue }
+            if role == "user" {
+                // Skip tool_result entries — they're user-role but not human input
+                if let blocks = msg["content"] as? [[String: Any]],
+                   blocks.allSatisfy({ $0["type"] as? String == "tool_result" }) { continue }
+                // Skip CLI-injected slash command outputs (not human prompts)
+                if let text = msg["content"] as? String,
+                   text.hasPrefix("<local-command") || text.hasPrefix("<command-name>") { continue }
+                return true
+            }
+            if role == "assistant" {
+                let stopReason = msg["stop_reason"] as? String
+                // tool_use → Claude is still running tools; nil → mid-stream write; both = active.
+                // Only end_turn / stop_sequence mean Claude has truly finished.
+                return stopReason == "tool_use" || stopReason == nil
+            }
+        }
+        return false
+    }
+
+    /// Returns the text of the most recent message (user or assistant) from a JSONL session file.
+    private static func lastMessage(in file: URL) -> String? {
         guard let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
         let lines = text.components(separatedBy: "\n")
         for line in lines.reversed() {
             guard !line.isEmpty,
                   let data = line.data(using: .utf8),
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let msg = obj["message"] as? [String: Any],
-                  msg["role"] as? String == "user"
+                  let msg = obj["message"] as? [String: Any]
             else { continue }
 
             let content = msg["content"]
             if let text = content as? String, !text.isEmpty {
+                // Skip CLI-injected slash command outputs
+                if text.hasPrefix("<local-command") || text.hasPrefix("<command-name>") { continue }
                 return text.trimmingCharacters(in: .whitespacesAndNewlines)
             }
             if let blocks = content as? [[String: Any]] {
@@ -239,6 +249,13 @@ enum LocalLogsService {
                     if block["type"] as? String == "text",
                        let text = block["text"] as? String, !text.isEmpty {
                         return text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                }
+                // If no text block, show tool name (assistant working)
+                for block in blocks {
+                    if block["type"] as? String == "tool_use",
+                       let name = block["name"] as? String {
+                        return "[\(name)]"
                     }
                 }
             }
@@ -267,12 +284,16 @@ enum LocalLogsService {
     private static func estimateCost(model: String, input: Int, output: Int,
                                      cacheWrite: Int, cacheRead: Int) -> Double {
         let (ip, op, cw, cr): (Double, Double, Double, Double)
-        if model.contains("opus") {
-            (ip, op, cw, cr) = (15.0, 75.0, 18.75, 1.50)
+        if model.contains("claude-3-opus") {
+            (ip, op, cw, cr) = (15.0, 75.0, 18.75, 1.50)   // legacy Opus 3
+        } else if model.contains("opus") {
+            (ip, op, cw, cr) = (5.0, 25.0, 6.25, 0.50)     // Opus 4.x+
+        } else if model.contains("claude-3-haiku-2024") {
+            (ip, op, cw, cr) = (0.25, 1.25, 0.30, 0.03)    // legacy Haiku 3
         } else if model.contains("haiku") {
-            (ip, op, cw, cr) = (0.80,  4.0,  1.00, 0.08)
+            (ip, op, cw, cr) = (1.0, 5.0, 1.25, 0.10)      // Haiku 3.5 / 4.x
         } else {
-            (ip, op, cw, cr) = (3.0,  15.0,  3.75, 0.30) // sonnet (default)
+            (ip, op, cw, cr) = (3.0, 15.0, 3.75, 0.30)     // sonnet (default, all gens ~same)
         }
         let M = 1_000_000.0
         return (Double(input) * ip + Double(output) * op +

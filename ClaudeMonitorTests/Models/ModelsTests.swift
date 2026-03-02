@@ -16,7 +16,7 @@ final class ModelsTests: XCTestCase {
     }
 
     func testSessionInfoHasNoTasksByDefault() {
-        let s = SessionInfo(projectPath: "~/dev/foo", lastActivity: Date())
+        let s = SessionInfo(id: "abc", projectPath: "~/dev/foo", lastActivity: Date())
         XCTAssertTrue(s.inProgressTasks.isEmpty)
     }
 }

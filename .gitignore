@@ -1,0 +1,17 @@
+# Build output
+build/
+DerivedData/
+*.profraw
+
+# Xcode user data
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+ClaudeMonitor.xcodeproj/project.xcworkspace/xcuserdata/
+ClaudeMonitor.xcodeproj/xcuserdata/
+
+# Claude Code agent files (personal memory, plans, transcripts)
+.claude/
+
+# macOS
+.DS_Store

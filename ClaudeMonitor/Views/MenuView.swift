@@ -13,6 +13,7 @@ struct MenuView: View {
         }
         .frame(width: 320)
         .padding(.vertical, 8)
+        .transaction { $0.animation = nil }
     }
 
     // MARK: - Sections
@@ -63,7 +64,7 @@ struct MenuView: View {
                     .padding(.horizontal, 14)
                     .padding(.bottom, 8)
             } else {
-                ForEach(Array(store.sessions.enumerated()), id: \.offset) { _, session in
+                ForEach(store.sessions) { session in
                     sessionRow(session)
                 }
                 .padding(.bottom, 6)
@@ -83,6 +84,16 @@ struct MenuView: View {
                     .lineLimit(1)
                     .truncationMode(.head)
                 Spacer()
+                if session.isCompacting {
+                    Text("Compacting…")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .italic()
+                } else if session.isProcessing {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 12, height: 12)
+                }
                 Text(session.lastActivity.relativeShort)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
@@ -125,6 +136,20 @@ struct MenuView: View {
             ActionButton(label: "Open Anthropic Console", icon: "arrow.up.right.square") {
                 NSWorkspace.shared.open(URL(string: "https://console.anthropic.com")!)
             }
+            if #available(macOS 14.0, *) {
+                SettingsLink {
+                    ActionButtonContent(label: "Preferences…", icon: "gearshape")
+                }
+                .buttonStyle(.plain)
+            } else {
+                Button {
+                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                    NSApp.activate(ignoringOtherApps: true)
+                } label: {
+                    ActionButtonContent(label: "Preferences…", icon: "gearshape")
+                }
+                .buttonStyle(.plain)
+            }
             Divider().padding(.horizontal, 12)
             ActionButton(label: "Quit Claude Monitor", icon: "power") {
                 NSApp.terminate(nil)
@@ -144,29 +169,38 @@ struct MenuView: View {
 
 // MARK: - Components
 
+private struct ActionButtonContent: View {
+    let label: String
+    let icon: String
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .frame(width: 14)
+                .foregroundStyle(.secondary)
+            Text(label)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .background(isHovered ? Color.primary.opacity(0.07) : .clear)
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+    }
+}
+
 private struct ActionButton: View {
     let label: String
     let icon: String
     let action: () -> Void
 
-    @State private var isHovered = false
-
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .frame(width: 14)
-                    .foregroundStyle(.secondary)
-                Text(label)
-                Spacer()
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-            .background(isHovered ? Color.primary.opacity(0.07) : .clear)
-            .contentShape(Rectangle())
+            ActionButtonContent(label: label, icon: icon)
         }
         .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
     }
 }
 
