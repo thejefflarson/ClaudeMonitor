@@ -16,3 +16,6 @@ docs/plans/
 
 # macOS
 .DS_Store
+
+# Generated build artifacts
+icon_source.png

@@ -7,6 +7,9 @@ enum ITerm2FocusService {
             ? home + projectPath.dropFirst()
             : projectPath
 
+        // Escape any `"` in the path using AppleScript's quote constant so the
+        // string literal is never broken by a path containing a double-quote.
+        let escapedPath = absPath.replacingOccurrences(of: "\"", with: "\" & quote & \"")
         let script = """
         tell application "iTerm2"
             repeat with w in windows
@@ -18,7 +21,7 @@ enum ITerm2FocusService {
                                 set p to variable named "session.path"
                             end tell
                         end try
-                        if p is "\(absPath)" then
+                        if p is "\(escapedPath)" then
                             tell s to select
                             tell w to select
                             activate
