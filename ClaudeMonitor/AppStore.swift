@@ -68,8 +68,10 @@ final class AppStore: ObservableObject {
             LocalLogsService.activeSessions()
         }.value
         // Preserve isCompacting — it's set by socket event, not derived from JSONL.
+        // But if Claude is actively processing, compaction is done — clear it.
         for i in result.indices {
-            if let prev = sessions.first(where: { $0.id == result[i].id }), prev.isCompacting {
+            if let prev = sessions.first(where: { $0.id == result[i].id }),
+               prev.isCompacting, !result[i].isProcessing {
                 result[i].isCompacting = true
             }
         }
