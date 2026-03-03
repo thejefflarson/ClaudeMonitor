@@ -25,10 +25,14 @@ enum LocalLogsService {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "UTC")!
         let now = Date()
+        let todayStart = cal.startOfDay(for: now)
         let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: now))!
+        let sparklineStart = cal.date(byAdding: .day, value: -29, to: todayStart)!
+        let scanCutoff = min(monthStart, sparklineStart)
 
         var totalTokens = 0
         var totalCost = 0.0
+        var costByDay: [Date: Double] = [:]   // keyed by day-start (midnight UTC)
 
         let isoFull = ISO8601DateFormatter()
         isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -39,13 +43,13 @@ enum LocalLogsService {
         }
 
         for dir in allProjectDirs where dir.hasDirectoryPath {
-            guard modDate(dir) > monthStart else { continue }
+            guard modDate(dir) > scanCutoff else { continue }
             guard let files = try? FileManager.default.contentsOfDirectory(
                 at: dir, includingPropertiesForKeys: [.contentModificationDateKey]
             ).filter({ $0.pathExtension == "jsonl" }) else { continue }
 
             for file in files {
-                guard modDate(file) > monthStart,
+                guard modDate(file) > scanCutoff,
                       let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
 
                 for line in text.components(separatedBy: "\n") {
@@ -54,7 +58,7 @@ enum LocalLogsService {
                           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                           let tsStr = obj["timestamp"] as? String,
                           let ts = isoFull.date(from: tsStr) ?? isoBasic.date(from: tsStr),
-                          ts >= monthStart,
+                          ts >= scanCutoff,
                           let msg = obj["message"] as? [String: Any],
                           msg["role"] as? String == "assistant",
                           let usage = msg["usage"] as? [String: Any]
@@ -66,16 +70,33 @@ enum LocalLogsService {
                     let cWrite = usage["cache_creation_input_tokens"] as? Int ?? 0
                     let cRead  = usage["cache_read_input_tokens"] as? Int ?? 0
 
-                    totalTokens += input + output + cWrite + cRead
-                    totalCost   += estimateCost(model: model, input: input, output: output,
+                    let lineCost = estimateCost(model: model, input: input, output: output,
                                                 cacheWrite: cWrite, cacheRead: cRead)
+
+                    // Billing totals: only current month
+                    if ts >= monthStart {
+                        totalTokens += input + output + cWrite + cRead
+                        totalCost   += lineCost
+                    }
+
+                    // Sparkline buckets: last 30 days
+                    if ts >= sparklineStart {
+                        let dayStart = cal.startOfDay(for: ts)
+                        costByDay[dayStart, default: 0] += lineCost
+                    }
                 }
             }
+        }
+
+        let dailyCosts = (0..<30).map { offset -> DailyCost in
+            let day = cal.date(byAdding: .day, value: offset, to: sparklineStart)!
+            return DailyCost(date: day, cost: costByDay[day] ?? 0)
         }
 
         var result = UsageData()
         result.tokensUsed  = totalTokens
         result.costUSD     = totalCost
+        result.dailyCosts  = dailyCosts
         result.periodStart = monthStart
         result.lastFetched = now
         return result
@@ -86,7 +107,9 @@ enum LocalLogsService {
         // Build JSONL index: sessionId → (file, projectPath, lastActivity)
         // Also reverse-index: absProjectPath → [(sessionId, file, lastActivity)]
         var sessionFiles:  [String: (file: URL, projectPath: String, lastActivity: Date)] = [:]
-        var cwdToSessions: [String: [(sessionId: String, file: URL, lastActivity: Date)]] = [:]
+        // Keyed by encoded directory name (e.g. "-Users-jeff-dev-hvac-research") to avoid
+        // lossy decoding — hyphens in project names are indistinguishable from path separators.
+        var slugToSessions: [String: [(sessionId: String, file: URL, lastActivity: Date)]] = [:]
 
         let allProjectDirs = projectsDirs.flatMap {
             (try? FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
@@ -97,28 +120,31 @@ enum LocalLogsService {
             ).filter({ $0.pathExtension == "jsonl" }) else { continue }
 
             let projectPath = projectPathFromDir(dir)
-            let decodedCwd = decodedPath(dir)
+            let slug = dir.lastPathComponent
             for file in jsonlFiles {
                 let sessionId = file.deletingPathExtension().lastPathComponent
                 let lastActivity = modDate(file)
                 sessionFiles[sessionId] = (file, projectPath, lastActivity)
-                cwdToSessions[decodedCwd, default: []].append((sessionId, file, lastActivity))
+                slugToSessions[slug, default: []].append((sessionId, file, lastActivity))
             }
         }
 
-        // Resolve running claude processes → session IDs
-        let liveSessionIds = runningClaudeSessionIds(cwdToSessions: cwdToSessions)
+        // Resolve running claude processes → session IDs + real CWDs
+        let liveEntries = runningClaudeSessions(slugToSessions: slugToSessions)
 
         var seen = Set<String>()
         var sessions: [SessionInfo] = []
+        let homePath = home.path
 
-        for sessionId in liveSessionIds {
+        for (sessionId, cwd) in liveEntries {
             guard seen.insert(sessionId).inserted,
                   let entry = sessionFiles[sessionId] else { continue }
+            // Use real CWD for display — avoids lossy slug decoding (e.g. "hvac-research")
+            let displayPath = cwd.hasPrefix(homePath) ? "~" + cwd.dropFirst(homePath.count) : cwd
             let processing = isAwaitingResponse(in: entry.file)
             sessions.append(SessionInfo(
                 id: sessionId,
-                projectPath: entry.projectPath,
+                projectPath: displayPath,
                 lastActivity: entry.lastActivity,
                 currentStatus: processing ? lastMessage(in: entry.file) : nil,
                 inProgressTasks: readTasks(sessionId: sessionId),
@@ -129,18 +155,19 @@ enum LocalLogsService {
         return sessions.sorted { $0.lastActivity > $1.lastActivity }
     }
 
-    /// Returns session IDs of all running `claude` processes using native kernel APIs.
-    /// Always uses CWD-based matching and picks the most recently modified JSONL in the
-    /// project dir — --resume points to the pre-compaction session, not the live one.
-    private static func runningClaudeSessionIds(
-        cwdToSessions: [String: [(sessionId: String, file: URL, lastActivity: Date)]]
-    ) -> [String] {
+    /// Returns (sessionId, cwd) pairs for all running `claude` processes using native kernel APIs.
+    /// Matches process CWD to JSONL files by encoding the CWD as a slug (replacing "/" with "-")
+    /// which is how Claude Code names its project directories. This avoids lossy decoding of
+    /// slugs that contain hyphens in the original path (e.g. "hvac-research").
+    private static func runningClaudeSessions(
+        slugToSessions: [String: [(sessionId: String, file: URL, lastActivity: Date)]]
+    ) -> [(sessionId: String, cwd: String)] {
         var pidCount = proc_listallpids(nil, 0)
         guard pidCount > 0 else { return [] }
         var pids = [pid_t](repeating: 0, count: Int(pidCount) + 16)
         pidCount = proc_listallpids(&pids, Int32(MemoryLayout<pid_t>.size * pids.count))
 
-        var result: [String] = []
+        var result: [(sessionId: String, cwd: String)] = []
         var pathBuf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
 
         for i in 0..<Int(pidCount) {
@@ -152,9 +179,11 @@ enum LocalLogsService {
             let execPath = String(cString: pathBuf)
             guard execPath.contains("/claude/versions/") || execPath.hasSuffix("/claude") else { continue }
 
-            if let cwd = processCwd(pid: pid),
-               let newest = cwdToSessions[cwd]?.max(by: { $0.lastActivity < $1.lastActivity }) {
-                result.append(newest.sessionId)
+            if let cwd = processCwd(pid: pid) {
+                let slug = cwd.replacingOccurrences(of: "/", with: "-")
+                if let newest = slugToSessions[slug]?.max(by: { $0.lastActivity < $1.lastActivity }) {
+                    result.append((newest.sessionId, cwd))
+                }
             }
         }
         return result

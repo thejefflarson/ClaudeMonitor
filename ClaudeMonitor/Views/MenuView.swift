@@ -44,6 +44,11 @@ struct MenuView: View {
                         .foregroundStyle(.tertiary)
                         .padding(.top, 1)
                 }
+
+                if !store.usage.dailyCosts.isEmpty {
+                    DailySparkline(dailyCosts: store.usage.dailyCosts)
+                        .padding(.top, 4)
+                }
             }
         }
         .padding(.horizontal, 14)
@@ -66,69 +71,11 @@ struct MenuView: View {
                     .padding(.bottom, 8)
             } else {
                 ForEach(store.sessions) { session in
-                    sessionRow(session)
+                    SessionRow(session: session)
                 }
                 .padding(.bottom, 6)
             }
         }
-    }
-
-    @ViewBuilder
-    private func sessionRow(_ session: SessionInfo) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            // Session header: project name + time
-            HStack(spacing: 6) {
-                Image(systemName: "folder.fill")
-                    .foregroundStyle(.secondary)
-                    .frame(width: 14)
-                Text(session.projectPath)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-                Spacer()
-                if session.isCompacting {
-                    Text("Compacting…")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .italic()
-                } else if session.isProcessing {
-                    ProgressView()
-                        .scaleEffect(0.5)
-                        .frame(width: 12, height: 12)
-                }
-                Text(session.lastActivity.relativeShort)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .monospacedDigit()
-            }
-
-            // Current status (last user message)
-            if let status = session.currentStatus, !status.isEmpty {
-                Text(status)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .italic()
-                    .lineLimit(2)
-                    .padding(.leading, 20)
-            }
-
-            // In-progress tasks as sub-items
-            ForEach(session.inProgressTasks, id: \.id) { task in
-                HStack(spacing: 4) {
-                    Text("↳")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .padding(.leading, 20)
-                    Image(systemName: "arrow.trianglehead.2.clockwise")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.orange)
-                    Text(task.subject)
-                        .font(.caption)
-                        .lineLimit(1)
-                }
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 4)
     }
 
     @ViewBuilder
@@ -169,6 +116,125 @@ struct MenuView: View {
 }
 
 // MARK: - Components
+
+private struct SessionRow: View {
+    let session: SessionInfo
+    @State private var isHovered = false
+
+    var body: some View {
+        Button {
+            Task.detached { ITerm2FocusService.focusSession(projectPath: session.projectPath) }
+            // Dismiss the menu bar popover
+            NSApp.keyWindow?.close()
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Image(systemName: "folder.fill")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 14)
+                    Text(session.projectPath)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                    Spacer()
+                    if session.isCompacting {
+                        Text("Compacting…")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .italic()
+                    } else if session.isProcessing {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 12, height: 12)
+                    }
+                    Text(session.lastActivity.relativeShort)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .monospacedDigit()
+                }
+
+                if let status = session.currentStatus, !status.isEmpty {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .italic()
+                        .lineLimit(2)
+                        .padding(.leading, 20)
+                }
+
+                ForEach(session.inProgressTasks, id: \.id) { task in
+                    HStack(spacing: 4) {
+                        Text("↳")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .padding(.leading, 20)
+                        Image(systemName: "arrow.trianglehead.2.clockwise")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.orange)
+                        Text(task.subject)
+                            .font(.caption)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 4)
+            .background(isHovered ? Color.primary.opacity(0.07) : .clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+}
+
+private struct DailySparkline: View {
+    let dailyCosts: [DailyCost]
+    @State private var hoveredDay: Date?
+
+    private static let utcCal: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "UTC")!
+        return c
+    }()
+
+    private static let tipFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        f.timeZone = TimeZone(identifier: "UTC")!
+        return f
+    }()
+
+    private var captionText: String {
+        guard let day = hoveredDay, let entry = dailyCosts.first(where: { $0.date == day }) else {
+            return " " // non-empty to preserve line height
+        }
+        return "\(Self.tipFormatter.string(from: day)): $\(String(format: "%.2f", entry.cost))"
+    }
+
+    var body: some View {
+        let maxCost = dailyCosts.map(\.cost).max() ?? 1
+        let barMax = max(maxCost, 0.01)
+        let today = Self.utcCal.startOfDay(for: Date())
+
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .bottom, spacing: 1.5) {
+                ForEach(dailyCosts) { entry in
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(entry.date == today ? Color.accentColor :
+                              entry.date == hoveredDay ? Color.secondary.opacity(0.55) :
+                              Color.secondary.opacity(0.35))
+                        .frame(height: max(1, CGFloat(entry.cost / barMax) * 32))
+                        .onHover { inside in hoveredDay = inside ? entry.date : nil }
+                }
+            }
+            .frame(height: 36, alignment: .bottom)
+
+            Text(captionText)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .invisible(hoveredDay == nil)
+        }
+    }
+}
 
 private struct ActionButtonContent: View {
     let label: String
@@ -215,6 +281,11 @@ private extension View {
             .foregroundStyle(.secondary)
             .textCase(.uppercase)
             .tracking(0.4)
+    }
+
+    /// Hides visually but preserves layout space.
+    func invisible(_ hidden: Bool) -> some View {
+        self.opacity(hidden ? 0 : 1)
     }
 }
 
