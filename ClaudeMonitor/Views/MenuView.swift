@@ -128,7 +128,7 @@ private struct SessionRow: View {
             NSApp.keyWindow?.close()
         } label: {
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Image(systemName: "folder.fill")
                         .foregroundStyle(.secondary)
                         .frame(width: 14)
@@ -145,6 +145,15 @@ private struct SessionRow: View {
                         ProgressView()
                             .scaleEffect(0.5)
                             .frame(width: 12, height: 12)
+                    }
+                    if session.sessionCost > 0 {
+                        Text(String(format: "$%.2f", session.sessionCost))
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .monospacedDigit()
+                        Text("·")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
                     }
                     Text(session.lastActivity.relativeShort)
                         .font(.caption)

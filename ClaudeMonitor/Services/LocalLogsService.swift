@@ -148,7 +148,8 @@ enum LocalLogsService {
                 lastActivity: entry.lastActivity,
                 currentStatus: processing ? lastMessage(in: entry.file) : nil,
                 inProgressTasks: readTasks(sessionId: sessionId),
-                isProcessing: processing
+                isProcessing: processing,
+                sessionCost: sessionCost(file: entry.file)
             ))
         }
 
@@ -204,6 +205,30 @@ enum LocalLogsService {
     }
 
     // MARK: - Private helpers
+
+    /// Total lifetime cost of a single session JSONL file (no date filtering).
+    private static func sessionCost(file: URL) -> Double {
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return 0 }
+        var total = 0.0
+        for line in text.components(separatedBy: "\n") {
+            guard !line.isEmpty,
+                  let data = line.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let msg = obj["message"] as? [String: Any],
+                  msg["role"] as? String == "assistant",
+                  let usage = msg["usage"] as? [String: Any]
+            else { continue }
+
+            let model  = msg["model"] as? String ?? ""
+            let input  = usage["input_tokens"] as? Int ?? 0
+            let output = usage["output_tokens"] as? Int ?? 0
+            let cWrite = usage["cache_creation_input_tokens"] as? Int ?? 0
+            let cRead  = usage["cache_read_input_tokens"] as? Int ?? 0
+            total += estimateCost(model: model, input: input, output: output,
+                                  cacheWrite: cWrite, cacheRead: cRead)
+        }
+        return total
+    }
 
     /// Reads task state from {tasksDir}/{sessionId}/*.json across all config roots.
     private static func readTasks(sessionId: String) -> [TaskItem] {

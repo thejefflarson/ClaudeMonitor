@@ -8,4 +8,5 @@ struct SessionInfo: Identifiable {
     var inProgressTasks: [TaskItem] = []
     var isProcessing: Bool = false
     var isCompacting: Bool = false
+    var sessionCost: Double = 0
 }
