@@ -5,6 +5,7 @@ final class AppStore: ObservableObject {
     @Published var usage = UsageData()
     @Published var sessions: [SessionInfo] = []
     @Published var isLoadingUsage = true
+    @Published var updateAvailable: URL? = nil
 
     private var usageTask: Task<Void, Never>?
     private var logsTask: Task<Void, Never>?
@@ -29,6 +30,7 @@ final class AppStore: ObservableObject {
         socketListener.start()
 
         startPolling()
+        Task { updateAvailable = await UpdateService.checkForUpdate() }
     }
 
     var trayLabel: String {

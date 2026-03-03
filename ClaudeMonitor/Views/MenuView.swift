@@ -81,6 +81,12 @@ struct MenuView: View {
     @ViewBuilder
     private var actionsSection: some View {
         VStack(spacing: 0) {
+            if let url = store.updateAvailable {
+                ActionButton(label: "Update available…", icon: "arrow.down.circle") {
+                    NSWorkspace.shared.open(url)
+                }
+                Divider().padding(.horizontal, 12)
+            }
             ActionButton(label: "Open Anthropic Console", icon: "arrow.up.right.square") {
                 NSWorkspace.shared.open(URL(string: "https://console.anthropic.com")!)
             }
