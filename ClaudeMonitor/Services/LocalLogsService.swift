@@ -61,6 +61,7 @@ enum LocalLogsService {
                           ts >= scanCutoff,
                           let msg = obj["message"] as? [String: Any],
                           msg["role"] as? String == "assistant",
+                          msg["stop_reason"] as? String != nil,
                           let usage = msg["usage"] as? [String: Any]
                     else { continue }
 
@@ -216,6 +217,7 @@ enum LocalLogsService {
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let msg = obj["message"] as? [String: Any],
                   msg["role"] as? String == "assistant",
+                  msg["stop_reason"] as? String != nil,
                   let usage = msg["usage"] as? [String: Any]
             else { continue }
 
