@@ -106,13 +106,14 @@ struct MenuView: View {
         .padding(.top, 4)
     }
 
-    // MARK: - Helpers
+}
 
-    private func formatTokens(_ n: Int) -> String {
-        if n >= 1_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
-        if n >= 1_000 { return String(format: "%.0fk", Double(n) / 1_000) }
-        return "\(n)"
-    }
+// MARK: - Helpers
+
+private func formatTokens(_ n: Int) -> String {
+    if n >= 1_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
+    if n >= 1_000 { return String(format: "%.0fk", Double(n) / 1_000) }
+    return "\(n)"
 }
 
 // MARK: - Components
@@ -147,7 +148,7 @@ private struct SessionRow: View {
                             .frame(width: 12, height: 12)
                     }
                     if session.sessionCost > 0 {
-                        Text(String(format: "$%.2f", session.sessionCost))
+                        Text("\(formatTokens(session.sessionTokens)) · \(String(format: "$%.2f", session.sessionCost))")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                             .monospacedDigit()
@@ -216,7 +217,7 @@ private struct DailySparkline: View {
         guard let day = hoveredDay, let entry = dailyCosts.first(where: { $0.date == day }) else {
             return " " // non-empty to preserve line height
         }
-        return "\(Self.tipFormatter.string(from: day)): $\(String(format: "%.2f", entry.cost))"
+        return "\(Self.tipFormatter.string(from: day)): $\(String(format: "%.2f", entry.cost)) · \(formatTokens(entry.tokens)) tokens"
     }
 
     var body: some View {

@@ -3,6 +3,7 @@ import Foundation
 struct DailyCost: Identifiable {
     var date: Date
     var cost: Double
+    var tokens: Int = 0
     var id: Date { date }
 }
 

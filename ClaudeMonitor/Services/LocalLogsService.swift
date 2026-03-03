@@ -33,6 +33,7 @@ enum LocalLogsService {
         var totalTokens = 0
         var totalCost = 0.0
         var costByDay: [Date: Double] = [:]   // keyed by day-start (midnight UTC)
+        var tokensByDay: [Date: Int] = [:]
 
         let isoFull = ISO8601DateFormatter()
         isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -80,10 +81,13 @@ enum LocalLogsService {
                         totalCost   += lineCost
                     }
 
+                    let lineTokens = input + output + cWrite + cRead
+
                     // Sparkline buckets: last 30 days
                     if ts >= sparklineStart {
                         let dayStart = cal.startOfDay(for: ts)
                         costByDay[dayStart, default: 0] += lineCost
+                        tokensByDay[dayStart, default: 0] += lineTokens
                     }
                 }
             }
@@ -91,7 +95,7 @@ enum LocalLogsService {
 
         let dailyCosts = (0..<30).map { offset -> DailyCost in
             let day = cal.date(byAdding: .day, value: offset, to: sparklineStart)!
-            return DailyCost(date: day, cost: costByDay[day] ?? 0)
+            return DailyCost(date: day, cost: costByDay[day] ?? 0, tokens: tokensByDay[day] ?? 0)
         }
 
         var result = UsageData()
@@ -143,6 +147,7 @@ enum LocalLogsService {
             // Use real CWD for display — avoids lossy slug decoding (e.g. "hvac-research")
             let displayPath = cwd.hasPrefix(homePath) ? "~" + cwd.dropFirst(homePath.count) : cwd
             let processing = isAwaitingResponse(in: entry.file)
+            let stats = sessionStats(file: entry.file)
             sessions.append(SessionInfo(
                 id: sessionId,
                 projectPath: displayPath,
@@ -150,7 +155,8 @@ enum LocalLogsService {
                 currentStatus: processing ? lastMessage(in: entry.file) : nil,
                 inProgressTasks: readTasks(sessionId: sessionId),
                 isProcessing: processing,
-                sessionCost: sessionCost(file: entry.file)
+                sessionCost: stats.cost,
+                sessionTokens: stats.tokens
             ))
         }
 
@@ -207,10 +213,11 @@ enum LocalLogsService {
 
     // MARK: - Private helpers
 
-    /// Total lifetime cost of a single session JSONL file (no date filtering).
-    private static func sessionCost(file: URL) -> Double {
-        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return 0 }
-        var total = 0.0
+    /// Total lifetime cost and token count of a single session JSONL file (no date filtering).
+    private static func sessionStats(file: URL) -> (cost: Double, tokens: Int) {
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return (0, 0) }
+        var totalCost = 0.0
+        var totalTokens = 0
         for line in text.components(separatedBy: "\n") {
             guard !line.isEmpty,
                   let data = line.data(using: .utf8),
@@ -226,10 +233,11 @@ enum LocalLogsService {
             let output = usage["output_tokens"] as? Int ?? 0
             let cWrite = usage["cache_creation_input_tokens"] as? Int ?? 0
             let cRead  = usage["cache_read_input_tokens"] as? Int ?? 0
-            total += estimateCost(model: model, input: input, output: output,
-                                  cacheWrite: cWrite, cacheRead: cRead)
+            totalCost += estimateCost(model: model, input: input, output: output,
+                                      cacheWrite: cWrite, cacheRead: cRead)
+            totalTokens += input + output + cWrite + cRead
         }
-        return total
+        return (totalCost, totalTokens)
     }
 
     /// Reads task state from {tasksDir}/{sessionId}/*.json across all config roots.

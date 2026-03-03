@@ -9,4 +9,5 @@ struct SessionInfo: Identifiable {
     var isProcessing: Bool = false
     var isCompacting: Bool = false
     var sessionCost: Double = 0
+    var sessionTokens: Int = 0
 }
