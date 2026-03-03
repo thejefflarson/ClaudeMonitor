@@ -6,8 +6,9 @@ A macOS menu bar app that monitors your [Claude Code](https://claude.ai/code) se
 
 ## Features
 
-- **Month-to-date cost** — calculated from local JSONL logs, no API key required
-- **Active sessions** — detects running `claude` processes and matches them to their project directory
+- **Month-to-date cost and tokens** — calculated from local JSONL logs, no API key required
+- **30-day sparkline** — daily cost bars with per-day cost and token totals on hover
+- **Active sessions** — detects running `claude` processes and matches them to their project directory; shows per-session token count and cost
 - **Spinner + status** — shows what Claude is working on while processing; clears immediately when it finishes (via Stop hook)
 - **In-progress tasks** — reads `~/.claude/tasks/` and surfaces incomplete tasks under each session
 - **Compaction indicator** — shows "Compacting…" when Claude Code is summarising the conversation context (via PreCompact hook)
