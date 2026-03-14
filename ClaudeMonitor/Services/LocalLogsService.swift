@@ -146,17 +146,16 @@ enum LocalLogsService {
                   let entry = sessionFiles[sessionId] else { continue }
             // Use real CWD for display — avoids lossy slug decoding (e.g. "hvac-research")
             let displayPath = cwd.hasPrefix(homePath) ? "~" + cwd.dropFirst(homePath.count) : cwd
-            let processing = isAwaitingResponse(in: entry.file)
-            let stats = sessionStats(file: entry.file)
+            let parsed = parseSession(file: entry.file)
             sessions.append(SessionInfo(
                 id: sessionId,
                 projectPath: displayPath,
                 lastActivity: entry.lastActivity,
-                currentStatus: processing ? lastMessage(in: entry.file) : nil,
+                currentStatus: parsed.isProcessing ? parsed.lastMessage : nil,
                 inProgressTasks: readTasks(sessionId: sessionId),
-                isProcessing: processing,
-                sessionCost: stats.cost,
-                sessionTokens: stats.tokens
+                isProcessing: parsed.isProcessing,
+                sessionCost: parsed.cost,
+                sessionTokens: parsed.tokens
             ))
         }
 
@@ -213,12 +212,40 @@ enum LocalLogsService {
 
     // MARK: - Private helpers
 
-    /// Total lifetime cost and token count of a single session JSONL file (no date filtering).
-    private static func sessionStats(file: URL) -> (cost: Double, tokens: Int) {
-        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return (0, 0) }
+    private struct SessionParseResult {
+        var isProcessing: Bool
+        var lastMessage: String?
+        var cost: Double
+        var tokens: Int
+    }
+
+    private struct CacheEntry {
+        var mtime: Date
+        var result: SessionParseResult
+    }
+
+    // Keyed by file path string to avoid URL equality pitfalls.
+    private static var parseCache: [String: CacheEntry] = [:]
+
+    /// Single-pass parse of a session JSONL file: derives processing state, last message,
+    /// lifetime cost, and token count without reading the file more than once.
+    /// Results are cached by mtime — if the file hasn't changed, no I/O or JSON parsing occurs.
+    private static func parseSession(file: URL) -> SessionParseResult {
+        let mtime = modDate(file)
+        let key = file.path
+        if let cached = parseCache[key], cached.mtime == mtime {
+            return cached.result
+        }
+
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else {
+            return SessionParseResult(isProcessing: false, lastMessage: nil, cost: 0, tokens: 0)
+        }
+        let lines = text.components(separatedBy: "\n")
+
+        // Forward pass: accumulate cost + tokens
         var totalCost = 0.0
         var totalTokens = 0
-        for line in text.components(separatedBy: "\n") {
+        for line in lines {
             guard !line.isEmpty,
                   let data = line.data(using: .utf8),
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -237,7 +264,69 @@ enum LocalLogsService {
                                       cacheWrite: cWrite, cacheRead: cRead)
             totalTokens += input + output + cWrite + cRead
         }
-        return (totalCost, totalTokens)
+
+        // Reverse pass: derive processing state + last visible message
+        var isProcessing = false
+        var lastMsg: String? = nil
+        for line in lines.reversed() {
+            guard !line.isEmpty,
+                  let data = line.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { continue }
+
+            if obj["type"] as? String == "system",
+               obj["subtype"] as? String == "stop_hook_summary" {
+                isProcessing = false
+                break
+            }
+
+            guard let msg = obj["message"] as? [String: Any],
+                  let role = msg["role"] as? String
+            else { continue }
+
+            if role == "user" {
+                if let blocks = msg["content"] as? [[String: Any]],
+                   blocks.allSatisfy({ $0["type"] as? String == "tool_result" }) { continue }
+                if let t = msg["content"] as? String,
+                   t.hasPrefix("<local-command") || t.hasPrefix("<command-name>") { continue }
+                isProcessing = true
+                break
+            }
+            if role == "assistant" {
+                let stopReason = msg["stop_reason"] as? String
+                isProcessing = stopReason == "tool_use" || stopReason == nil
+
+                if lastMsg == nil {
+                    let content = msg["content"]
+                    if let t = content as? String, !t.isEmpty {
+                        lastMsg = t.trimmingCharacters(in: .whitespacesAndNewlines)
+                    } else if let blocks = content as? [[String: Any]] {
+                        for block in blocks {
+                            if block["type"] as? String == "text",
+                               let t = block["text"] as? String, !t.isEmpty {
+                                lastMsg = t.trimmingCharacters(in: .whitespacesAndNewlines)
+                                break
+                            }
+                        }
+                        if lastMsg == nil {
+                            for block in blocks {
+                                if block["type"] as? String == "tool_use",
+                                   let name = block["name"] as? String {
+                                    lastMsg = "[\(name)]"
+                                    break
+                                }
+                            }
+                        }
+                    }
+                }
+                break
+            }
+        }
+
+        let result = SessionParseResult(isProcessing: isProcessing, lastMessage: lastMsg,
+                                        cost: totalCost, tokens: totalTokens)
+        parseCache[key] = CacheEntry(mtime: mtime, result: result)
+        return result
     }
 
     /// Reads task state from {tasksDir}/{sessionId}/*.json across all config roots.
@@ -258,85 +347,6 @@ enum LocalLogsService {
             else { return nil }
             return TaskItem(id: id, subject: subject)
         }.sorted { (Int($0.id) ?? 0) < (Int($1.id) ?? 0) }
-    }
-
-    /// True when Claude is actively working — either waiting to respond or mid-tool-execution.
-    /// Skips tool_result lines (user-role but not human input).
-    /// Uses stop_hook_summary as an authoritative "turn complete" signal: if one appears before
-    /// any message entry in the reversed scan, Claude has finished its turn regardless of
-    /// whether the last assistant message carried stop_reason=end_turn (Sonnet 4.x omits it).
-    private static func isAwaitingResponse(in file: URL) -> Bool {
-        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return false }
-        for line in text.components(separatedBy: "\n").reversed() {
-            guard !line.isEmpty,
-                  let data = line.data(using: .utf8),
-                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            else { continue }
-
-            // stop_hook_summary is written by Claude Code after each completed turn.
-            // If we encounter it before any message entry, the turn is done.
-            if obj["type"] as? String == "system",
-               obj["subtype"] as? String == "stop_hook_summary" {
-                return false
-            }
-
-            guard let msg = obj["message"] as? [String: Any],
-                  let role = msg["role"] as? String
-            else { continue }
-
-            if role == "user" {
-                // Skip tool_result entries — they're user-role but not human input
-                if let blocks = msg["content"] as? [[String: Any]],
-                   blocks.allSatisfy({ $0["type"] as? String == "tool_result" }) { continue }
-                // Skip CLI-injected slash command outputs (not human prompts)
-                if let text = msg["content"] as? String,
-                   text.hasPrefix("<local-command") || text.hasPrefix("<command-name>") { continue }
-                return true
-            }
-            if role == "assistant" {
-                let stopReason = msg["stop_reason"] as? String
-                // tool_use → Claude is still running tools; nil → mid-stream write; both = active.
-                // end_turn / stop_sequence → done (older Claude Code versions set this explicitly).
-                return stopReason == "tool_use" || stopReason == nil
-            }
-        }
-        return false
-    }
-
-    /// Returns the text of the most recent message (user or assistant) from a JSONL session file.
-    private static func lastMessage(in file: URL) -> String? {
-        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
-        let lines = text.components(separatedBy: "\n")
-        for line in lines.reversed() {
-            guard !line.isEmpty,
-                  let data = line.data(using: .utf8),
-                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let msg = obj["message"] as? [String: Any]
-            else { continue }
-
-            let content = msg["content"]
-            if let text = content as? String, !text.isEmpty {
-                // Skip CLI-injected slash command outputs
-                if text.hasPrefix("<local-command") || text.hasPrefix("<command-name>") { continue }
-                return text.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-            if let blocks = content as? [[String: Any]] {
-                for block in blocks {
-                    if block["type"] as? String == "text",
-                       let text = block["text"] as? String, !text.isEmpty {
-                        return text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    }
-                }
-                // If no text block, show tool name (assistant working)
-                for block in blocks {
-                    if block["type"] as? String == "tool_use",
-                       let name = block["name"] as? String {
-                        return "[\(name)]"
-                    }
-                }
-            }
-        }
-        return nil
     }
 
     /// Absolute decoded path for cwd matching (e.g. "-Users-jeff-dev-chirp" → "/Users/jeff/dev/chirp").
