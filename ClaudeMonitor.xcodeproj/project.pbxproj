@@ -12,6 +12,7 @@
 		3A3081D9186196489CB27A8C /* ModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26E1B04096D849B011ED370F /* ModelsTests.swift */; };
 		3E9978D085266F4266F54A4A /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B670286CE8808DA9BCABC600 /* AppStore.swift */; };
 		3F7FC26C0D4F73C98182A88E /* LocalLogsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DB9F0B7AB9F17D1A45F66CE /* LocalLogsService.swift */; };
+		415198619EAA3D384C0502EE /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26A96CBED22F08FF1D154BC6 /* UpdateService.swift */; };
 		6D1E9FFFB95081492D5A91F7 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4B70BFAA4A1F54F31F1769B /* PreferencesView.swift */; };
 		82B4A30B9CF969BA05030DDA /* ClaudeMonitorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0FB52122C9A94A475FA81B /* ClaudeMonitorApp.swift */; };
 		A2A97DCFBF65FDF628610B6D /* HookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = E95259972DE9EE6D0517AFB4 /* HookInstaller.swift */; };
@@ -46,6 +47,7 @@
 		01E69CD8161F734BE0624EC4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0870310A582BBA5E78B9D365 /* sample_session.jsonl */ = {isa = PBXFileReference; path = sample_session.jsonl; sourceTree = "<group>"; };
 		11550C7AEDE26A33A2AE29AA /* MenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuView.swift; sourceTree = "<group>"; };
+		26A96CBED22F08FF1D154BC6 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 		26E1B04096D849B011ED370F /* ModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsTests.swift; sourceTree = "<group>"; };
 		2E2971C88C4540B881C3F825 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		36DADF2FC9CDEAA1B21749D4 /* LocalLogsServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLogsServiceTests.swift; sourceTree = "<group>"; };
@@ -117,6 +119,7 @@
 				CDE2BBB607EF6B41668CD2E7 /* ITerm2FocusService.swift */,
 				7DB9F0B7AB9F17D1A45F66CE /* LocalLogsService.swift */,
 				D19A94C122F7CFD586C4AA5D /* UnixSocketListener.swift */,
+				26A96CBED22F08FF1D154BC6 /* UpdateService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -335,6 +338,7 @@
 				BD1CAF4EC60A46D03FF97D2C /* SessionInfo.swift in Sources */,
 				EE76017973D97193555440DD /* TaskItem.swift in Sources */,
 				A9AC9AB4FDE42063C6FD1DF5 /* UnixSocketListener.swift in Sources */,
+				415198619EAA3D384C0502EE /* UpdateService.swift in Sources */,
 				E69C8C56170B983F24C7E940 /* UsageData.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -479,13 +483,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = ClaudeMonitor/ClaudeMonitor.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 5;
 				INFOPLIST_FILE = ClaudeMonitor/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.4.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jeffl.es.ClaudeMonitor;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.9;
@@ -561,13 +565,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = ClaudeMonitor/ClaudeMonitor.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 5;
 				INFOPLIST_FILE = ClaudeMonitor/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.4.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jeffl.es.ClaudeMonitor;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.9;
