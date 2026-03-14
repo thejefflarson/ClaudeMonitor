@@ -40,6 +40,12 @@ The encoded path uses `-` as a path separator (e.g. `-Users-jeff-dev-chirp` → 
 
 Model family is detected by checking if `message.model` contains `"opus"` or `"haiku"` (sonnet is the default). Prices are hardcoded in `LocalLogsService.estimateCost`. Update them there when Anthropic changes pricing.
 
+## Release process
+
+1. Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `project.yml`
+2. Commit, push, tag (`git tag vX.Y.Z && git push origin vX.Y.Z`)
+3. `gh release create vX.Y.Z --title "vX.Y.Z" --notes "..."`
+
 ## What NOT to do
 
 - Don't use the Anthropic API for usage data — the org-level endpoints (`/v1/organizations/cost_report`) require an Admin API key that only works with organization accounts, not individual users.
