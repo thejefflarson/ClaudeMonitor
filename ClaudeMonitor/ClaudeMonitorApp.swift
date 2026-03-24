@@ -13,9 +13,5 @@ struct ClaudeMonitorApp: App {
                 .monospacedDigit()
         }
         .menuBarExtraStyle(.window)
-
-        Settings {
-            PreferencesView()
-        }
     }
 }

@@ -6,6 +6,8 @@ final class AppStore: ObservableObject {
     @Published var sessions: [SessionInfo] = []
     @Published var isLoadingUsage = true
     @Published var updateAvailable: URL? = nil
+    /// Path of the most recently focused terminal — drives the minimap highlight.
+    @Published var focusedPath: String? = nil
 
     private var usageTask: Task<Void, Never>?
     private var logsTask: Task<Void, Never>?
@@ -15,7 +17,7 @@ final class AppStore: ObservableObject {
     private var lastFocused: [String: Date] = [:]
 
     init() {
-        UserDefaults.standard.register(defaults: ["iterm2FocusEnabled": true])
+        UserDefaults.standard.register(defaults: ["terminalFocusApp": "iTerm2"])
         HookInstaller.installIfNeeded()
 
         socketListener.onStop = { [weak self] event in
@@ -61,7 +63,10 @@ final class AppStore: ObservableObject {
     }
 
     private func refreshUsage() async {
-        usage = LocalLogsService.monthlyUsage()
+        let result = await Task.detached(priority: .utility) {
+            LocalLogsService.monthlyUsage()
+        }.value
+        usage = result
         isLoadingUsage = false
     }
 
@@ -84,7 +89,40 @@ final class AppStore: ObservableObject {
         let now = Date()
         if let last = lastFocused[sessionId], now.timeIntervalSince(last) < 5 { return }
         lastFocused[sessionId] = now
-        Task.detached { ITerm2FocusService.focusSession(projectPath: path) }
+        let app = UserDefaults.standard.string(forKey: "terminalFocusApp") ?? "iTerm2"
+        let followsCenter = UserDefaults.standard.bool(forKey: "focusFollowsCenter")
+
+        switch app {
+        case "iTerm2":
+            if followsCenter {
+                Task.detached { [weak self] in
+                    let focused = CenterFocusService.focusCenterITerm2()
+                    let p = focused ?? path
+                    await MainActor.run { self?.focusedPath = p }
+                }
+            } else {
+                focusedPath = path
+                Task.detached { ITerm2FocusService.focusSession(projectPath: path) }
+            }
+        case "Mosaic":
+            if followsCenter {
+                Task.detached { [weak self] in
+                    // Focus center iTerm2 window, get its path, then navigate Mosaic there.
+                    let centerPath = CenterFocusService.focusCenterITerm2() ?? path
+                    MosaicFocusService.focusSession(projectPath: centerPath)
+                    await MainActor.run { self?.focusedPath = centerPath }
+                }
+            } else {
+                focusedPath = path
+                Task.detached { MosaicFocusService.focusSession(projectPath: path) }
+            }
+        default: break
+        }
+    }
+
+    /// Called when the user manually clicks a session row — updates the minimap highlight.
+    func userFocused(path: String) {
+        focusedPath = path
     }
 
     /// Called immediately when a PreCompact hook fires — Claude is about to compact context.
@@ -98,7 +136,7 @@ final class AppStore: ObservableObject {
 
     /// Called when a Notification hook fires — covers permission_prompt and idle_prompt.
     private func handleNotificationEvent(_ event: NotificationEvent) {
-        guard UserDefaults.standard.bool(forKey: "iterm2FocusEnabled") else { return }
+        guard (UserDefaults.standard.string(forKey: "terminalFocusApp") ?? "iTerm2") != "disabled" else { return }
         guard event.notificationType == "permission_prompt" || event.notificationType == "idle_prompt"
         else { return }
         let session = sessions.first { $0.id == event.sessionId }
@@ -115,7 +153,7 @@ final class AppStore: ObservableObject {
             sessions[idx].currentStatus = nil
         }
 
-        guard UserDefaults.standard.bool(forKey: "iterm2FocusEnabled") else { return }
+        guard (UserDefaults.standard.string(forKey: "terminalFocusApp") ?? "iTerm2") != "disabled" else { return }
         let session = sessions.first { $0.id == event.sessionId }
             ?? sessions.first { $0.projectPath == event.cwd.map(projectPathFromCwd) }
         guard let session else { return }

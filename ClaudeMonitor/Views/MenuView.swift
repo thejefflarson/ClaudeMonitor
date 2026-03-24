@@ -90,20 +90,12 @@ struct MenuView: View {
             ActionButton(label: "Open Anthropic Console", icon: "arrow.up.right.square") {
                 NSWorkspace.shared.open(URL(string: "https://console.anthropic.com")!)
             }
-            if #available(macOS 14.0, *) {
-                SettingsLink {
-                    ActionButtonContent(label: "Preferences…", icon: "gearshape")
-                }
-                .buttonStyle(.plain)
-            } else {
-                Button {
-                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-                    NSApp.activate(ignoringOtherApps: true)
-                } label: {
-                    ActionButtonContent(label: "Preferences…", icon: "gearshape")
-                }
-                .buttonStyle(.plain)
+            Button {
+                PreferencesWindowController.show()
+            } label: {
+                ActionButtonContent(label: "Preferences…", icon: "gearshape")
             }
+            .buttonStyle(.plain)
             Divider().padding(.horizontal, 12)
             ActionButton(label: "Quit Claude Monitor", icon: "power") {
                 NSApp.terminate(nil)
