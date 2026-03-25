@@ -16,6 +16,8 @@ targets:
         link: false
     postCompileScripts:
       - name: Embed ClaudeMonitorHook
+        outputFiles:
+          - $(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/Contents/MacOS/ClaudeMonitorHook
         script: |
           src="${BUILT_PRODUCTS_DIR}/ClaudeMonitorHook"
           dst="${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/MacOS/ClaudeMonitorHook"
@@ -29,6 +31,9 @@ targets:
         MARKETING_VERSION: "1.5.0"
         CURRENT_PROJECT_VERSION: "8"
         SWIFT_VERSION: "5.9"
+        DEVELOPMENT_TEAM: 2PR729W8E3
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "Developer ID Application"
 
   ClaudeMonitorHook:
     type: tool

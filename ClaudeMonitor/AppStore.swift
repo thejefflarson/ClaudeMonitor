@@ -98,7 +98,8 @@ final class AppStore: ObservableObject {
                 Task.detached { [weak self] in
                     let focused = CenterFocusService.focusCenterITerm2()
                     let p = focused ?? path
-                    await MainActor.run { self?.focusedPath = p }
+                    let s = self
+                    await MainActor.run { s?.focusedPath = p }
                 }
             } else {
                 focusedPath = path
@@ -110,7 +111,8 @@ final class AppStore: ObservableObject {
                     // Focus center iTerm2 window, get its path, then navigate Mosaic there.
                     let centerPath = CenterFocusService.focusCenterITerm2() ?? path
                     MosaicFocusService.focusSession(projectPath: centerPath)
-                    await MainActor.run { self?.focusedPath = centerPath }
+                    let s = self
+                    await MainActor.run { s?.focusedPath = centerPath }
                 }
             } else {
                 focusedPath = path

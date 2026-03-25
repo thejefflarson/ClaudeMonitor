@@ -14,6 +14,8 @@
     <string>NSApplication</string>
     <key>LSUIElement</key>
     <true/>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.developer-tools</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>ClaudeMonitor uses Apple Events to focus the iTerm2 terminal window when Claude is ready for input.</string>
 </dict>

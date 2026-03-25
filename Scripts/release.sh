@@ -59,49 +59,17 @@ echo "→ generating Xcode project"
 xcodegen generate --quiet
 
 echo "→ building archive (Release)"
-SIGN_ARGS=(
-    CODE_SIGN_IDENTITY="Developer ID Application"
-    CODE_SIGN_STYLE=Manual
-    CODE_SIGNING_ALLOWED=YES
-)
-[[ -n "${DEVELOPMENT_TEAM:-}" ]] && SIGN_ARGS+=(DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM")
-
 xcodebuild archive \
     -scheme "$APP_NAME" \
     -configuration Release \
     -archivePath "$ARCHIVE" \
-    "${SIGN_ARGS[@]}" \
     -quiet
 
 # ── Export ────────────────────────────────────────────────────────────────────
 
-echo "→ exporting app"
-EXPORT_OPTIONS="$BUILD_DIR/ExportOptions.plist"
-cat > "$EXPORT_OPTIONS" << 'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>method</key>
-    <string>developer-id</string>
-    <key>signingStyle</key>
-    <string>manual</string>
-    <key>signingCertificate</key>
-    <string>Developer ID Application</string>
-</dict>
-</plist>
-PLIST
-
-if [[ -n "${DEVELOPMENT_TEAM:-}" ]]; then
-    /usr/libexec/PlistBuddy \
-        -c "Add :teamID string $DEVELOPMENT_TEAM" "$EXPORT_OPTIONS"
-fi
-
-xcodebuild -exportArchive \
-    -archivePath "$ARCHIVE" \
-    -exportPath "$EXPORT_DIR" \
-    -exportOptionsPlist "$EXPORT_OPTIONS" \
-    -quiet
+echo "→ copying app from archive"
+mkdir -p "$EXPORT_DIR"
+cp -R "$ARCHIVE/Products/Applications/$APP_NAME.app" "$EXPORT_DIR/"
 
 # ── DMG ───────────────────────────────────────────────────────────────────────
 
