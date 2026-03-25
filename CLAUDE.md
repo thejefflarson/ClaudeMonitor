@@ -45,6 +45,13 @@ Model family is detected by checking if `message.model` contains `"opus"` or `"h
 1. Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `project.yml`
 2. Commit, push, tag (`git tag vX.Y.Z && git push origin vX.Y.Z`)
 3. `gh release create vX.Y.Z --title "vX.Y.Z" --notes "..."`
+4. Build and attach the zip:
+```bash
+xcodegen generate
+xcodebuild -scheme ClaudeMonitor -configuration Release -derivedDataPath build
+cd build/Build/Products/Release && zip -r /tmp/ClaudeMonitor.zip ClaudeMonitor.app
+gh release upload vX.Y.Z /tmp/ClaudeMonitor.zip
+```
 
 ## What NOT to do
 
