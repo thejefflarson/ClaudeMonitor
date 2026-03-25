@@ -71,6 +71,17 @@ echo "→ copying app from archive"
 mkdir -p "$EXPORT_DIR"
 cp -R "$ARCHIVE/Products/Applications/$APP_NAME.app" "$EXPORT_DIR/"
 
+echo "→ re-signing with hardened runtime and secure timestamp"
+IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+APP="$EXPORT_DIR/$APP_NAME.app"
+# Sign nested executables/dylibs first (inside-out ordering)
+find "$APP/Contents" -type f \( -perm +0111 -o -name "*.dylib" \) | sort -r | while IFS= read -r f; do
+    codesign --force --sign "$IDENTITY" --timestamp --options runtime "$f" 2>/dev/null || true
+done
+codesign --force --deep --sign "$IDENTITY" --timestamp --options runtime \
+    --entitlements "$REPO_ROOT/ClaudeMonitor/ClaudeMonitor.entitlements" \
+    "$APP"
+
 # ── DMG ───────────────────────────────────────────────────────────────────────
 
 echo "→ creating DMG"
