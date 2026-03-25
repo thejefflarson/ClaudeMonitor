@@ -254,6 +254,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
+					1BA94E0C01D277A3D97D540D = {
+						DevelopmentTeam = 2PR729W8E3;
+						ProvisioningStyle = Manual;
+					};
 				};
 			};
 			buildConfigurationList = B0EBEFBDBC2E41CED86FDF2F /* Build configuration list for PBXProject "ClaudeMonitor" */;
@@ -497,8 +501,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = ClaudeMonitor/ClaudeMonitor.entitlements;
+				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 8;
+				DEVELOPMENT_TEAM = 2PR729W8E3;
 				INFOPLIST_FILE = ClaudeMonitor/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -579,8 +586,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = ClaudeMonitor/ClaudeMonitor.entitlements;
+				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 8;
+				DEVELOPMENT_TEAM = 2PR729W8E3;
 				INFOPLIST_FILE = ClaudeMonitor/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
