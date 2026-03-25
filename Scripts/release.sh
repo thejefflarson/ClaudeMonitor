@@ -113,9 +113,21 @@ git push origin main
 git tag "$VERSION"
 git push origin "$VERSION"
 
+echo "→ drafting release notes"
+PREV_TAG=$(git tag --sort=-version:refname | grep -v "^$VERSION$" | head -1)
+if [[ -n "$PREV_TAG" ]]; then
+    COMMITS=$(git log "$PREV_TAG..HEAD" --oneline)
+else
+    COMMITS=$(git log --oneline -20)
+fi
+RELEASE_NOTES=$(claude -p "You are writing release notes for $APP_NAME $VERSION, a macOS menu bar app that monitors Claude Code sessions. Based on these git commits, write concise user-facing release notes in markdown. Focus on what changed for users, not implementation details. Use bullet points. Do not include a title or version header — just the bullets.
+
+Commits:
+$COMMITS")
+
 echo "→ creating GitHub release"
 gh release create "$VERSION" "$DMG" \
     --title "$APP_NAME $VERSION" \
-    --generate-notes
+    --notes "$RELEASE_NOTES"
 
 echo "done — $APP_NAME $VERSION released"
