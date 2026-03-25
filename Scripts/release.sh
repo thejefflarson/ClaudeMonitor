@@ -120,10 +120,17 @@ if [[ -n "$PREV_TAG" ]]; then
 else
     COMMITS=$(git log --oneline -20)
 fi
-RELEASE_NOTES=$(claude -p "You are writing release notes for $APP_NAME $VERSION, a macOS menu bar app that monitors Claude Code sessions. Based on these git commits, write concise user-facing release notes in markdown. Focus on what changed for users, not implementation details. Use bullet points. Do not include a title or version header — just the bullets.
+NOTES_FILE=$(mktemp)
+claude -p "You are writing release notes for $APP_NAME $VERSION, a macOS menu bar app that monitors Claude Code sessions. Based on these git commits, write concise user-facing release notes in markdown. Focus on what changed for users, not implementation details. Use bullet points. Do not include a title or version header — just the bullets.
 
 Commits:
-$COMMITS")
+$COMMITS" > "$NOTES_FILE" 2>/dev/null
+RELEASE_NOTES=$(cat "$NOTES_FILE")
+rm -f "$NOTES_FILE"
+# Fall back to commit list if claude produced no output
+if [[ -z "$RELEASE_NOTES" ]]; then
+    RELEASE_NOTES="$COMMITS"
+fi
 
 echo "→ creating GitHub release"
 gh release create "$VERSION" "$DMG" \
