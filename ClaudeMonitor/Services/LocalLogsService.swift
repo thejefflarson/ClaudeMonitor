@@ -39,18 +39,27 @@ enum LocalLogsService {
         isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let isoBasic = ISO8601DateFormatter()
 
+        // Cap the number of project directories and skip symlinks to prevent
+        // unbounded scanning and symlink-based escapes outside ~/.claude/. (insecure-design, model-dos)
         let allProjectDirs = projectsDirs.flatMap {
-            (try? FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+            ((try? FileManager.default.contentsOfDirectory(
+                at: $0,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: .skipsSymbolicLinks)) ?? []).prefix(1000)
         }
 
         for dir in allProjectDirs where dir.hasDirectoryPath {
             guard modDate(dir) > scanCutoff else { continue }
             guard let files = try? FileManager.default.contentsOfDirectory(
-                at: dir, includingPropertiesForKeys: [.contentModificationDateKey]
+                at: dir,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: .skipsSymbolicLinks
             ).filter({ $0.pathExtension == "jsonl" }) else { continue }
 
             for file in files {
+                // File-size guard: skip JSONL files larger than 100 MB to prevent OOM. (model-dos)
                 guard modDate(file) > scanCutoff,
+                      ((try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) < 100 * 1_048_576,
                       let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
 
                 for line in text.components(separatedBy: "\n") {
@@ -331,6 +340,9 @@ enum LocalLogsService {
 
     /// Reads task state from {tasksDir}/{sessionId}/*.json across all config roots.
     private static func readTasks(sessionId: String) -> [TaskItem] {
+        // Validate sessionId is a UUID before appending to the tasks path. A non-UUID value
+        // (e.g. "../../../etc") supplied by a malicious socket peer would cause path traversal. (insecure-design)
+        guard UUID(uuidString: sessionId) != nil else { return [] }
         let dirs = tasksDirs.map { $0.appendingPathComponent(sessionId) }
         guard let dir = dirs.first(where: { isDir($0) }) else { return [] }
         guard let files = try? FileManager.default.contentsOfDirectory(
@@ -352,7 +364,9 @@ enum LocalLogsService {
     /// Absolute decoded path for cwd matching (e.g. "-Users-jeff-dev-chirp" → "/Users/jeff/dev/chirp").
     private static func decodedPath(_ dir: URL) -> String {
         let encoded = dir.lastPathComponent
-        return "/" + encoded.replacingOccurrences(of: "-", with: "/").dropFirst()
+        let raw = "/" + encoded.replacingOccurrences(of: "-", with: "/").dropFirst()
+        // Normalize to remove any ".." traversal components introduced by a crafted directory name. (path-traversal)
+        return URL(fileURLWithPath: raw).standardized.path
     }
 
     /// Display path relative to home (e.g. "-Users-jeff-dev-chirp" → "~/dev/chirp").

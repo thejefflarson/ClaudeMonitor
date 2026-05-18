@@ -7,6 +7,8 @@ enum MosaicFocusService {
             ? home + projectPath.dropFirst()
             : projectPath
 
+        // Guard against AppleScript injection: newlines break out of the string literal. (injection)
+        guard !absPath.contains("\n"), !absPath.contains("\r") else { return }
         let escapedPath = absPath.replacingOccurrences(of: "\"", with: "\" & quote & \"")
         let script = """
         tell application "Mosaic"
