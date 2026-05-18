@@ -7,6 +7,9 @@ enum ITerm2FocusService {
             ? home + projectPath.dropFirst()
             : projectPath
 
+        // Guard against AppleScript injection: newlines and carriage returns can break
+        // out of an AppleScript string literal, allowing arbitrary command injection. (injection)
+        guard !absPath.contains("\n"), !absPath.contains("\r") else { return }
         // Escape any `"` in the path using AppleScript's quote constant so the
         // string literal is never broken by a path containing a double-quote.
         let escapedPath = absPath.replacingOccurrences(of: "\"", with: "\" & quote & \"")

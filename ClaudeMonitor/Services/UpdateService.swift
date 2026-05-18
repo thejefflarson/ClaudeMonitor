@@ -11,7 +11,11 @@ enum UpdateService {
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let tagName = obj["tag_name"] as? String,
               let htmlUrl = obj["html_url"] as? String,
-              let releaseURL = URL(string: htmlUrl)
+              let releaseURL = URL(string: htmlUrl),
+              // Validate scheme and host before passing to NSWorkspace.open() to prevent
+              // open-redirect to arbitrary URL schemes from a compromised API response. (open-redirect)
+              releaseURL.scheme == "https",
+              releaseURL.host == "github.com"
         else { return nil }
 
         let remote = tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName

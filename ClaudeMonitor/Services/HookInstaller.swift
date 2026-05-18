@@ -17,8 +17,11 @@ enum HookInstaller {
     // MARK: - Private
 
     private static func copyHelperBinary() {
-        let src = Bundle.main.bundleURL
-            .appendingPathComponent("Contents/MacOS/ClaudeMonitorHook")
+        let bundleURL = Bundle.main.bundleURL.standardized
+        let src = bundleURL.appendingPathComponent("Contents/MacOS/ClaudeMonitorHook").standardized
+        // Verify the resolved source path is inside the app bundle to prevent
+        // symlink-based path traversal outside the bundle. (insecure-design, integrity-failures)
+        guard src.path.hasPrefix(bundleURL.path + "/") else { return }
         guard FileManager.default.fileExists(atPath: src.path) else { return }
         let dst = URL(fileURLWithPath: helperPath)
         let fm = FileManager.default
@@ -38,7 +41,9 @@ enum HookInstaller {
 
     private static func installHook(in url: URL) {
         var settings: [String: Any] = [:]
+        // File-size guard: reject implausibly large settings files before parsing. (insecure-design)
         if let data = try? Data(contentsOf: url),
+           data.count < 10 * 1_048_576,
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             settings = json
         }
@@ -78,7 +83,9 @@ enum HookInstaller {
         guard let data = try? JSONSerialization.data(
             withJSONObject: settings, options: [.prettyPrinted, .sortedKeys]
         ) else { return }
-        try? data.write(to: url)
+        // .atomic writes to a temp file then renames, so a crash mid-write cannot
+        // leave settings.json empty or partially written. (race-condition)
+        try? data.write(to: url, options: .atomic)
     }
 
     private static func isExistingDir(_ url: URL) -> Bool {

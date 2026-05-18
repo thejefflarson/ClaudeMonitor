@@ -156,8 +156,9 @@ final class AppStore: ObservableObject {
         }
 
         guard (UserDefaults.standard.string(forKey: "terminalFocusApp") ?? "iTerm2") != "disabled" else { return }
+        // Only match by session ID — do NOT use socket-supplied cwd for lookup, as
+        // it comes from an unauthenticated peer and could drive AppleScript injection. (insecure-plugin-design)
         let session = sessions.first { $0.id == event.sessionId }
-            ?? sessions.first { $0.projectPath == event.cwd.map(projectPathFromCwd) }
         guard let session else { return }
         maybeFireFocus(for: session.id, path: session.projectPath)
     }
