@@ -21,7 +21,7 @@ struct MenuView: View {
     @ViewBuilder
     private var usageSection: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Label("This Month", systemImage: "chart.bar.fill")
+            Label("Estimated API Value", systemImage: "chart.bar.fill")
                 .sectionHeaderStyle()
 
             if store.isLoadingUsage {

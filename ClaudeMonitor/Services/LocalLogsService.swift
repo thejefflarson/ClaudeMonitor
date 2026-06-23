@@ -34,6 +34,11 @@ enum LocalLogsService {
         var totalCost = 0.0
         var costByDay: [Date: Double] = [:]   // keyed by day-start (midnight UTC)
         var tokensByDay: [Date: Int] = [:]
+        // Claude Code re-writes the same assistant response (same message.id, identical
+        // usage) multiple times within a session's JSONL. Each copy carries a non-null
+        // stop_reason, so the stop_reason filter doesn't catch them. A msg_… id is billed
+        // exactly once, so dedupe on it to avoid double-counting (was ~2× inflated).
+        var seenMessageIDs = Set<String>()
 
         let isoFull = ISO8601DateFormatter()
         isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -74,6 +79,11 @@ enum LocalLogsService {
                           msg["stop_reason"] as? String != nil,
                           let usage = msg["usage"] as? [String: Any]
                     else { continue }
+
+                    // Skip repeated copies of an already-counted billed response.
+                    if let id = msg["id"] as? String, !seenMessageIDs.insert(id).inserted {
+                        continue
+                    }
 
                     let model = msg["model"] as? String ?? ""
                     let input  = usage["input_tokens"] as? Int ?? 0
@@ -254,6 +264,7 @@ enum LocalLogsService {
         // Forward pass: accumulate cost + tokens
         var totalCost = 0.0
         var totalTokens = 0
+        var seenMessageIDs = Set<String>()   // dedupe repeated assistant responses (see monthlyUsage)
         for line in lines {
             guard !line.isEmpty,
                   let data = line.data(using: .utf8),
@@ -263,6 +274,8 @@ enum LocalLogsService {
                   msg["stop_reason"] as? String != nil,
                   let usage = msg["usage"] as? [String: Any]
             else { continue }
+
+            if let id = msg["id"] as? String, !seenMessageIDs.insert(id).inserted { continue }
 
             let model  = msg["model"] as? String ?? ""
             let input  = usage["input_tokens"] as? Int ?? 0
