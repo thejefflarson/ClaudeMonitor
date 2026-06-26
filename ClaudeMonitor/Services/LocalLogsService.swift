@@ -49,17 +49,17 @@ enum LocalLogsService {
         let allProjectDirs = projectsDirs.flatMap {
             ((try? FileManager.default.contentsOfDirectory(
                 at: $0,
-                includingPropertiesForKeys: [.contentModificationDateKey],
-                options: .skipsSymbolicLinks)) ?? []).prefix(1000)
+                includingPropertiesForKeys: [.contentModificationDateKey, .isSymbolicLinkKey])) ?? [])
+                .filter { !isSymlink($0) }
+                .prefix(1000)
         }
 
         for dir in allProjectDirs where dir.hasDirectoryPath {
             guard modDate(dir) > scanCutoff else { continue }
             guard let files = try? FileManager.default.contentsOfDirectory(
                 at: dir,
-                includingPropertiesForKeys: [.contentModificationDateKey],
-                options: .skipsSymbolicLinks
-            ).filter({ $0.pathExtension == "jsonl" }) else { continue }
+                includingPropertiesForKeys: [.contentModificationDateKey, .isSymbolicLinkKey]
+            ).filter({ $0.pathExtension == "jsonl" && !isSymlink($0) }) else { continue }
 
             for file in files {
                 // File-size guard: skip JSONL files larger than 100 MB to prevent OOM. (model-dos)
@@ -391,6 +391,11 @@ enum LocalLogsService {
 
     private static func modDate(_ url: URL) -> Date {
         (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+    }
+
+    /// True if the URL is a symlink — used to avoid following links outside ~/.claude/.
+    private static func isSymlink(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink ?? false
     }
 
     /// Approximate cost in USD based on published per-million-token prices.
