@@ -45,6 +45,12 @@ struct MenuView: View {
                         .padding(.top, 1)
                 }
 
+                Text("What this usage would cost at API rates — not your bill if you're on a plan.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 3)
+
                 if !store.usage.dailyCosts.isEmpty {
                     DailySparkline(dailyCosts: store.usage.dailyCosts)
                         .padding(.top, 4)
