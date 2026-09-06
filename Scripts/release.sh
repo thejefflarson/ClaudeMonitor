@@ -121,11 +121,13 @@ else
     COMMITS=$(git log --oneline -20)
 fi
 NOTES_FILE=$(mktemp)
-claude -p "You are writing release notes for $APP_NAME $VERSION, a macOS menu bar app that monitors Claude Code sessions. Based on these git commits, write concise user-facing release notes in markdown. Focus on what changed for users, not implementation details. Use bullet points. Do not include a title or version header — just the bullets.
+claude -p "You are writing release notes for $APP_NAME $VERSION, a macOS menu bar app that monitors Claude Code sessions. Based on these git commits, write concise user-facing release notes in markdown. Focus on what changed for users, not implementation details. Use bullet points. Output nothing but the bullets: no title, no version header, no code fence, and no commentary about what you included or left out.
 
 Commits:
 $COMMITS" > "$NOTES_FILE" 2>/dev/null
-RELEASE_NOTES=$(cat "$NOTES_FILE")
+# Keep only bullet lines: claude wraps its answer in a ```markdown fence and often
+# appends a sentence about its own choices, both of which would land in the release.
+RELEASE_NOTES=$(grep -E '^[[:space:]]*[-*][[:space:]]' "$NOTES_FILE" || true)
 rm -f "$NOTES_FILE"
 # Fall back to commit list if claude produced no output
 if [[ -z "$RELEASE_NOTES" ]]; then
