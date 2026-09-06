@@ -33,8 +33,17 @@ targets:
         SWIFT_VERSION: "5.9"
         DEVELOPMENT_TEAM: 2PR729W8E3
         CODE_SIGN_STYLE: Manual
-        CODE_SIGN_IDENTITY: "Developer ID Application"
-        ENABLE_HARDENED_RUNTIME: YES
+      configs:
+        # Debug signs ad-hoc with the hardened runtime off. Developer ID + hardened
+        # runtime turns on library validation, which refuses to dlopen a test bundle
+        # signed by a different team — and the test bundle is ad-hoc signed, so
+        # `xcodebuild test` failed to load ClaudeMonitorTests.xctest.
+        Debug:
+          CODE_SIGN_IDENTITY: "-"
+          ENABLE_HARDENED_RUNTIME: NO
+        Release:
+          CODE_SIGN_IDENTITY: "Developer ID Application"
+          ENABLE_HARDENED_RUNTIME: YES
 
   ClaudeMonitorHook:
     type: tool
