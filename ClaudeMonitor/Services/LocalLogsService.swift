@@ -231,7 +231,7 @@ enum LocalLogsService {
 
     // MARK: - Private helpers
 
-    private struct SessionParseResult {
+    struct SessionParseResult {
         var isProcessing: Bool
         var lastMessage: String?
         var cost: Double
@@ -240,57 +240,100 @@ enum LocalLogsService {
 
     private struct CacheEntry {
         var mtime: Date
+        var offset: UInt64          // bytes consumed for cost/tokens, aligned to a line boundary
+        var totalCost: Double
+        var totalTokens: Int
+        var seenIDs: Set<String>    // message.ids already counted, to survive across incremental reads
         var result: SessionParseResult
     }
 
     // Keyed by file path string to avoid URL equality pitfalls.
     private static var parseCache: [String: CacheEntry] = [:]
 
-    /// Single-pass parse of a session JSONL file: derives processing state, last message,
-    /// lifetime cost, and token count without reading the file more than once.
-    /// Results are cached by mtime — if the file hasn't changed, no I/O or JSON parsing occurs.
-    private static func parseSession(file: URL) -> SessionParseResult {
+    // Bytes read from the file's tail for the reverse pass. Bounds that pass to O(1)
+    // regardless of file size; must comfortably exceed the largest single JSONL line.
+    private static let tailWindow: UInt64 = 1_048_576
+
+    /// Incremental parse of a session JSONL file: derives processing state, last message,
+    /// lifetime cost, and token count. Active sessions are append-only, so cost/tokens
+    /// resume from a saved byte offset and only newly appended lines are parsed; the
+    /// reverse pass reads a bounded tail. This keeps per-poll work proportional to bytes
+    /// appended, not total file size (active logs reach 100+ MB and are re-read every poll).
+    /// Unchanged files (same mtime) short-circuit with no I/O.
+    static func parseSession(file: URL) -> SessionParseResult {
         let mtime = modDate(file)
         let key = file.path
-        if let cached = parseCache[key], cached.mtime == mtime {
+        let cached = parseCache[key]
+        if let cached, cached.mtime == mtime {
             return cached.result
         }
 
-        guard let text = try? String(contentsOf: file, encoding: .utf8) else {
+        guard let handle = try? FileHandle(forReadingFrom: file) else {
             return SessionParseResult(isProcessing: false, lastMessage: nil, cost: 0, tokens: 0)
         }
-        let lines = text.components(separatedBy: "\n")
+        defer { try? handle.close() }
 
-        // Forward pass: accumulate cost + tokens
+        // Read the true size from the open handle. URL.resourceValues(.fileSizeKey) caches
+        // on the URL and returns a stale size on a growing file, which would freeze the
+        // incremental read (and thus the session's cost) after the first poll.
+        let fileSize = (try? handle.seekToEnd()) ?? 0
+
+        // Resume the running totals unless the file shrank (truncation/rotation), in which
+        // case start fresh — a shorter file can't be an append to what we already counted.
+        var offset: UInt64 = 0
         var totalCost = 0.0
         var totalTokens = 0
         var seenMessageIDs = Set<String>()   // dedupe repeated assistant responses (see monthlyUsage)
-        for line in lines {
-            guard !line.isEmpty,
-                  let data = line.data(using: .utf8),
-                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let msg = obj["message"] as? [String: Any],
-                  msg["role"] as? String == "assistant",
-                  msg["stop_reason"] as? String != nil,
-                  let usage = msg["usage"] as? [String: Any]
-            else { continue }
-
-            if let id = msg["id"] as? String, !seenMessageIDs.insert(id).inserted { continue }
-
-            let model  = msg["model"] as? String ?? ""
-            let input  = usage["input_tokens"] as? Int ?? 0
-            let output = usage["output_tokens"] as? Int ?? 0
-            let cWrite = usage["cache_creation_input_tokens"] as? Int ?? 0
-            let cRead  = usage["cache_read_input_tokens"] as? Int ?? 0
-            totalCost += estimateCost(model: model, input: input, output: output,
-                                      cacheWrite: cWrite, cacheRead: cRead)
-            totalTokens += input + output + cWrite + cRead
+        if let cached, fileSize >= cached.offset {
+            offset = cached.offset
+            totalCost = cached.totalCost
+            totalTokens = cached.totalTokens
+            seenMessageIDs = cached.seenIDs
         }
 
-        // Reverse pass: derive processing state + last visible message
+        // Forward pass: read only [offset, EOF) and parse up to the last complete line.
+        // A trailing partial line (mid-write) is left unconsumed and re-read next poll.
+        if offset < fileSize {
+            try? handle.seek(toOffset: offset)
+            let appended = (try? handle.readToEnd()) ?? Data()
+            if let lastNL = appended.lastIndex(of: 0x0A) {
+                let complete = appended[...lastNL]
+                offset += UInt64(complete.count)
+                for line in String(decoding: complete, as: UTF8.self).components(separatedBy: "\n") {
+                    guard !line.isEmpty,
+                          let data = line.data(using: .utf8),
+                          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let msg = obj["message"] as? [String: Any],
+                          msg["role"] as? String == "assistant",
+                          msg["stop_reason"] as? String != nil,
+                          let usage = msg["usage"] as? [String: Any]
+                    else { continue }
+
+                    if let id = msg["id"] as? String, !seenMessageIDs.insert(id).inserted { continue }
+
+                    let model  = msg["model"] as? String ?? ""
+                    let input  = usage["input_tokens"] as? Int ?? 0
+                    let output = usage["output_tokens"] as? Int ?? 0
+                    let cWrite = usage["cache_creation_input_tokens"] as? Int ?? 0
+                    let cRead  = usage["cache_read_input_tokens"] as? Int ?? 0
+                    totalCost += estimateCost(model: model, input: input, output: output,
+                                              cacheWrite: cWrite, cacheRead: cRead)
+                    totalTokens += input + output + cWrite + cRead
+                }
+            }
+        }
+
+        // Reverse pass: processing state + last message live in the file's tail, so read a
+        // bounded window from the end rather than the whole file.
+        let tailStart = fileSize > tailWindow ? fileSize - tailWindow : 0
+        try? handle.seek(toOffset: tailStart)
+        let tailData = (try? handle.readToEnd()) ?? Data()
+        var tailLines = String(decoding: tailData, as: UTF8.self).components(separatedBy: "\n")
+        if tailStart > 0 && !tailLines.isEmpty { tailLines.removeFirst() }  // drop partial leading line
+
         var isProcessing = false
         var lastMsg: String? = nil
-        for line in lines.reversed() {
+        for line in tailLines.reversed() {
             guard !line.isEmpty,
                   let data = line.data(using: .utf8),
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -347,7 +390,9 @@ enum LocalLogsService {
 
         let result = SessionParseResult(isProcessing: isProcessing, lastMessage: lastMsg,
                                         cost: totalCost, tokens: totalTokens)
-        parseCache[key] = CacheEntry(mtime: mtime, result: result)
+        parseCache[key] = CacheEntry(mtime: mtime, offset: offset, totalCost: totalCost,
+                                     totalTokens: totalTokens, seenIDs: seenMessageIDs,
+                                     result: result)
         return result
     }
 
@@ -390,7 +435,11 @@ enum LocalLogsService {
     }
 
     private static func modDate(_ url: URL) -> Date {
-        (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+        // Stat the path rather than asking the URL: URL.resourceValues caches on the URL
+        // instance, so a reused URL keeps reporting the mtime it saw first — which would
+        // freeze parseSession's mtime short-circuit on a file that is still growing.
+        (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+            ?? .distantPast
     }
 
     /// True if the URL is a symlink — used to avoid following links outside ~/.claude/.
