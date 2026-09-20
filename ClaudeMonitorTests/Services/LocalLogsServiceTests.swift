@@ -181,4 +181,49 @@ final class LocalLogsServiceTests: XCTestCase {
         XCTAssertEqual(u.total, 31)
     }
 
+
+    // MARK: - forEachLine streaming reader
+
+    /// Lines must come back identically whether or not they straddle a chunk boundary.
+    /// The month scan reads logs far larger than one chunk, so this is the risky path.
+    func testForEachLineSpansChunkBoundaries() {
+        let file = makeTempFile()
+        // Lines sized so that many land across the 1 MB chunk edge.
+        let lines = (0..<400).map { "line-\($0)-" + String(repeating: "x", count: 5_000) }
+        write(lines.joined(separator: "\n") + "\n", to: file)
+        XCTAssertGreaterThan((try! FileManager.default.attributesOfItem(atPath: file.path)[.size] as! Int),
+                             LocalLogsService.scanChunkSize,
+                             "fixture must exceed one chunk or it proves nothing")
+
+        var got: [String] = []
+        LocalLogsService.forEachLine(in: file) { got.append(String(decoding: $0, as: UTF8.self)) }
+        XCTAssertEqual(got, lines)
+    }
+
+    /// A file whose last line has no terminating newline must still yield that line.
+    func testForEachLineYieldsUnterminatedFinalLine() {
+        let file = makeTempFile()
+        write("a\nb\nc", to: file)
+        var got: [String] = []
+        LocalLogsService.forEachLine(in: file) { got.append(String(decoding: $0, as: UTF8.self)) }
+        XCTAssertEqual(got, ["a", "b", "c"])
+    }
+
+    /// Blank lines are preserved as empty, not dropped, so callers decide what to skip.
+    func testForEachLineKeepsEmptyLines() {
+        let file = makeTempFile()
+        write("a\n\nb\n", to: file)
+        var got: [String] = []
+        LocalLogsService.forEachLine(in: file) { got.append(String(decoding: $0, as: UTF8.self)) }
+        XCTAssertEqual(got, ["a", "", "b"])
+    }
+
+    func testForEachLineOnMissingFileYieldsNothing() {
+        var called = false
+        LocalLogsService.forEachLine(in: URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString)")) { _ in
+            called = true
+        }
+        XCTAssertFalse(called)
+    }
+
 }

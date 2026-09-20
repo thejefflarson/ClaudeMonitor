@@ -62,15 +62,15 @@ enum LocalLogsService {
             ).filter({ $0.pathExtension == "jsonl" && !isSymlink($0) }) else { continue }
 
             for file in files {
-                // File-size guard: skip JSONL files larger than 100 MB to prevent OOM. (model-dos)
-                guard modDate(file) > scanCutoff,
-                      ((try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) < 100 * 1_048_576,
-                      let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+                guard modDate(file) > scanCutoff else { continue }
 
-                for line in text.components(separatedBy: "\n") {
-                    guard !line.isEmpty,
-                          let data = line.data(using: .utf8),
-                          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                forEachLine(in: file) { line in
+                    // Only assistant usage lines can contribute, and a line without the
+                    // `"usage"` key cannot have message.usage — a byte scan for it is far
+                    // cheaper than parsing every line's JSON.
+                    guard line.range(of: usageKey) != nil else { return }
+
+                    guard let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
                           let tsStr = obj["timestamp"] as? String,
                           let ts = isoFull.date(from: tsStr) ?? isoBasic.date(from: tsStr),
                           ts >= scanCutoff,
@@ -78,11 +78,11 @@ enum LocalLogsService {
                           msg["role"] as? String == "assistant",
                           msg["stop_reason"] as? String != nil,
                           let usage = msg["usage"] as? [String: Any]
-                    else { continue }
+                    else { return }
 
                     // Skip repeated copies of an already-counted billed response.
                     if let id = msg["id"] as? String, !seenMessageIDs.insert(id).inserted {
-                        continue
+                        return
                     }
 
                     let model = msg["model"] as? String ?? ""
@@ -249,6 +249,12 @@ enum LocalLogsService {
     // Bytes read from the file's tail for the reverse pass. Bounds that pass to O(1)
     // regardless of file size; must comfortably exceed the largest single JSONL line.
     private static let tailWindow: UInt64 = 1_048_576
+
+    /// Bytes read per `forEachLine` chunk — caps the month scan's memory use.
+    static let scanChunkSize = 1_048_576
+
+    /// `"usage"` as bytes — the cheap pre-filter for scan lines worth parsing.
+    private static let usageKey = Data(#""usage""#.utf8)
 
     /// Incremental parse of a session JSONL file: derives processing state, last message,
     /// lifetime cost, and token count. Active sessions are append-only, so cost/tokens
@@ -425,6 +431,39 @@ enum LocalLogsService {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return abs.hasPrefix(home) ? "~" + abs.dropFirst(home.count) : abs
     }
+
+    /// Calls `body` once per line of a file, reading in bounded chunks.
+    ///
+    /// The month scan used to read each JSONL with `String(contentsOf:)` and skip anything
+    /// over 100 MB so a huge log couldn't exhaust memory. Active sessions routinely pass
+    /// that — four did in one month — and every skipped file silently dropped its whole
+    /// cost from the total. Streaming bounds memory by the chunk size instead of the file
+    /// size, so no session has to be excluded.
+    ///
+    /// Lines are handed over as `Data`, not `String`: the scan feeds them straight to
+    /// `JSONSerialization`, so materializing a String per line would be pure overhead on
+    /// the millions of lines a month's logs contain.
+    static func forEachLine(in file: URL, _ body: (Data) -> Void) {
+        guard let handle = try? FileHandle(forReadingFrom: file) else { return }
+        defer { try? handle.close() }
+
+        var remainder = Data()
+        while let chunk = try? handle.read(upToCount: scanChunkSize), !chunk.isEmpty {
+            remainder.append(chunk)
+            // One pool per chunk: the JSON parse below autoreleases, and without a pool
+            // inside the loop nothing drains until the whole scan finishes.
+            autoreleasepool {
+                while let nl = remainder.firstIndex(of: 0x0A) {
+                    body(remainder[remainder.startIndex..<nl])
+                    remainder = remainder[remainder.index(after: nl)...]
+                }
+                // Re-base so the slice doesn't keep referencing the consumed buffer.
+                remainder = Data(remainder)
+            }
+        }
+        if !remainder.isEmpty { autoreleasepool { body(remainder) } }
+    }
+
 
     private static func modDate(_ url: URL) -> Date {
         // Stat the path rather than asking the URL: URL.resourceValues caches on the URL
