@@ -86,21 +86,17 @@ enum LocalLogsService {
                     }
 
                     let model = msg["model"] as? String ?? ""
-                    let input  = usage["input_tokens"] as? Int ?? 0
-                    let output = usage["output_tokens"] as? Int ?? 0
-                    let cWrite = usage["cache_creation_input_tokens"] as? Int ?? 0
-                    let cRead  = usage["cache_read_input_tokens"] as? Int ?? 0
+                    let tokens = tokenUsage(from: usage)
 
-                    let lineCost = estimateCost(model: model, input: input, output: output,
-                                                cacheWrite: cWrite, cacheRead: cRead)
+                    let lineCost = estimateCost(model: model, usage: tokens)
 
                     // Billing totals: only current month
                     if ts >= monthStart {
-                        totalTokens += input + output + cWrite + cRead
+                        totalTokens += tokens.total
                         totalCost   += lineCost
                     }
 
-                    let lineTokens = input + output + cWrite + cRead
+                    let lineTokens = tokens.total
 
                     // Sparkline buckets: last 30 days
                     if ts >= sparklineStart {
@@ -312,13 +308,9 @@ enum LocalLogsService {
                     if let id = msg["id"] as? String, !seenMessageIDs.insert(id).inserted { continue }
 
                     let model  = msg["model"] as? String ?? ""
-                    let input  = usage["input_tokens"] as? Int ?? 0
-                    let output = usage["output_tokens"] as? Int ?? 0
-                    let cWrite = usage["cache_creation_input_tokens"] as? Int ?? 0
-                    let cRead  = usage["cache_read_input_tokens"] as? Int ?? 0
-                    totalCost += estimateCost(model: model, input: input, output: output,
-                                              cacheWrite: cWrite, cacheRead: cRead)
-                    totalTokens += input + output + cWrite + cRead
+                    let tokens = tokenUsage(from: usage)
+                    totalCost += estimateCost(model: model, usage: tokens)
+                    totalTokens += tokens.total
                 }
             }
         }
@@ -447,23 +439,62 @@ enum LocalLogsService {
         (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink ?? false
     }
 
-    /// Approximate cost in USD based on published per-million-token prices.
-    private static func estimateCost(model: String, input: Int, output: Int,
-                                     cacheWrite: Int, cacheRead: Int) -> Double {
-        let (ip, op, cw, cr): (Double, Double, Double, Double)
-        if model.contains("claude-3-opus") {
-            (ip, op, cw, cr) = (15.0, 75.0, 18.75, 1.50)   // legacy Opus 3
-        } else if model.contains("opus") {
-            (ip, op, cw, cr) = (5.0, 25.0, 6.25, 0.50)     // Opus 4.x+
-        } else if model.contains("claude-3-haiku-2024") {
-            (ip, op, cw, cr) = (0.25, 1.25, 0.30, 0.03)    // legacy Haiku 3
-        } else if model.contains("haiku") {
-            (ip, op, cw, cr) = (1.0, 5.0, 1.25, 0.10)      // Haiku 3.5 / 4.x
+    /// Token counts for one billed response. Cache writes are split by TTL because
+    /// the two are priced differently (see `estimateCost`).
+    struct TokenUsage {
+        var input = 0
+        var output = 0
+        var cacheWrite5m = 0
+        var cacheWrite1h = 0
+        var cacheRead = 0
+        var total: Int { input + output + cacheWrite5m + cacheWrite1h + cacheRead }
+    }
+
+    /// Pulls the billed token counts out of a `message.usage` object.
+    /// `cache_creation` carries the per-TTL breakdown; logs written before Claude Code
+    /// emitted it only have the flat `cache_creation_input_tokens`, which was 5-minute.
+    static func tokenUsage(from usage: [String: Any]) -> TokenUsage {
+        var u = TokenUsage()
+        u.input     = usage["input_tokens"] as? Int ?? 0
+        u.output    = usage["output_tokens"] as? Int ?? 0
+        u.cacheRead = usage["cache_read_input_tokens"] as? Int ?? 0
+        if let split = usage["cache_creation"] as? [String: Any] {
+            u.cacheWrite5m = split["ephemeral_5m_input_tokens"] as? Int ?? 0
+            u.cacheWrite1h = split["ephemeral_1h_input_tokens"] as? Int ?? 0
         } else {
-            (ip, op, cw, cr) = (3.0, 15.0, 3.75, 0.30)     // sonnet (default, all gens ~same)
+            u.cacheWrite5m = usage["cache_creation_input_tokens"] as? Int ?? 0
         }
-        let M = 1_000_000.0
-        return (Double(input) * ip + Double(output) * op +
-                Double(cacheWrite) * cw + Double(cacheRead) * cr) / M
+        return u
+    }
+
+    /// Base input price per million tokens, and the cache-read multiplier, per model family.
+    /// Every other rate is a fixed multiple of the base price, so one number per family
+    /// covers input, output, and both cache-write TTLs.
+    private static func pricing(for model: String) -> (base: Double, cacheRead: Double) {
+        if model.contains("claude-3-opus")        { return (15.00, 0.1) }    // legacy Opus 3
+        if model.contains("fable") ||
+           model.contains("mythos")               { return (10.00, 0.025) }  // Fable/Mythos read at 0.025x
+        if model.contains("opus")                 { return (5.00, 0.1) }     // Opus 4.x / 5
+        if model.contains("claude-3-haiku-2024")  { return (0.25, 0.1) }     // legacy Haiku 3
+        if model.contains("haiku")                { return (1.00, 0.1) }     // Haiku 3.5 / 4.x
+        if model.contains("sonnet-5")             { return (2.00, 0.1) }     // Sonnet 5 is cheaper
+        return (3.00, 0.1)                                                   // Sonnet 4.6 and earlier
+    }
+
+    /// Cost in USD from published per-million-token prices. Rates are multiples of each
+    /// model's base input price: output 5x, cache read 0.1x (0.025x on Fable/Mythos),
+    /// 5-minute cache write 1.25x, 1-hour cache write 2x.
+    ///
+    /// The two cache-write TTLs must stay separate: Claude Code writes almost all of its
+    /// cache at the 1-hour TTL, and charging those at the 5-minute rate understated the
+    /// monthly figure by about 15%.
+    static func estimateCost(model: String, usage u: TokenUsage) -> Double {
+        let (base, readMultiplier) = pricing(for: model)
+        let millions = (Double(u.input)
+                        + Double(u.output) * 5.0
+                        + Double(u.cacheWrite5m) * 1.25
+                        + Double(u.cacheWrite1h) * 2.0
+                        + Double(u.cacheRead) * readMultiplier) / 1_000_000.0
+        return millions * base
     }
 }

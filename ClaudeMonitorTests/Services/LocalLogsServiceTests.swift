@@ -109,4 +109,76 @@ final class LocalLogsServiceTests: XCTestCase {
         let after = LocalLogsService.parseSession(file: file)
         XCTAssertEqual(after.tokens, 10, "totals should reset when the file shrinks, not accumulate")
     }
+
+    // MARK: - Cost estimation
+
+    private func usage(input: Int = 0, output: Int = 0, cacheRead: Int = 0,
+                       write5m: Int = 0, write1h: Int = 0) -> [String: Any] {
+        ["input_tokens": input, "output_tokens": output,
+         "cache_read_input_tokens": cacheRead,
+         "cache_creation_input_tokens": write5m + write1h,
+         "cache_creation": ["ephemeral_5m_input_tokens": write5m,
+                            "ephemeral_1h_input_tokens": write1h]]
+    }
+
+    /// Published rates: output is 5x the base input price, cache reads 0.1x.
+    func testBaseRatesPerModelFamily() {
+        let oneM = LocalLogsService.tokenUsage(from: usage(input: 1_000_000))
+        XCTAssertEqual(LocalLogsService.estimateCost(model: "claude-opus-5", usage: oneM), 5.00, accuracy: 1e-9)
+        XCTAssertEqual(LocalLogsService.estimateCost(model: "claude-sonnet-5", usage: oneM), 2.00, accuracy: 1e-9)
+        XCTAssertEqual(LocalLogsService.estimateCost(model: "claude-sonnet-4-6", usage: oneM), 3.00, accuracy: 1e-9)
+        XCTAssertEqual(LocalLogsService.estimateCost(model: "claude-haiku-4-5", usage: oneM), 1.00, accuracy: 1e-9)
+        XCTAssertEqual(LocalLogsService.estimateCost(model: "claude-fable-5-1", usage: oneM), 10.00, accuracy: 1e-9)
+
+        let oneMOut = LocalLogsService.tokenUsage(from: usage(output: 1_000_000))
+        XCTAssertEqual(LocalLogsService.estimateCost(model: "claude-opus-5", usage: oneMOut), 25.00, accuracy: 1e-9)
+        XCTAssertEqual(LocalLogsService.estimateCost(model: "claude-sonnet-5", usage: oneMOut), 10.00, accuracy: 1e-9)
+    }
+
+    /// Sonnet 5 is $2/$10 per MTok; earlier Sonnets are $3/$15. Pricing them alike
+    /// overcharged every Sonnet 5 response by 50%.
+    func testSonnet5PricedBelowEarlierSonnets() {
+        let u = LocalLogsService.tokenUsage(from: usage(input: 1_000_000, output: 1_000_000))
+        let five = LocalLogsService.estimateCost(model: "claude-sonnet-5", usage: u)
+        let four = LocalLogsService.estimateCost(model: "claude-sonnet-4-6", usage: u)
+        XCTAssertEqual(five, 12.00, accuracy: 1e-9)
+        XCTAssertEqual(four, 18.00, accuracy: 1e-9)
+    }
+
+    /// A 1-hour cache write costs 2x base input; a 5-minute write costs 1.25x.
+    func testCacheWriteTTLsPricedDifferently() {
+        let w5 = LocalLogsService.tokenUsage(from: usage(write5m: 1_000_000))
+        let w1h = LocalLogsService.tokenUsage(from: usage(write1h: 1_000_000))
+        XCTAssertEqual(LocalLogsService.estimateCost(model: "claude-opus-5", usage: w5), 6.25, accuracy: 1e-9)
+        XCTAssertEqual(LocalLogsService.estimateCost(model: "claude-opus-5", usage: w1h), 10.00, accuracy: 1e-9)
+
+        let read = LocalLogsService.tokenUsage(from: usage(cacheRead: 1_000_000))
+        XCTAssertEqual(LocalLogsService.estimateCost(model: "claude-opus-5", usage: read), 0.50, accuracy: 1e-9)
+        // Fable reads at 0.025x, not 0.1x.
+        XCTAssertEqual(LocalLogsService.estimateCost(model: "claude-fable-5-1", usage: read), 0.25, accuracy: 1e-9)
+    }
+
+    /// Logs written before Claude Code emitted the per-TTL breakdown carry only the flat
+    /// count; those writes were 5-minute, so they must not be charged the 1-hour rate.
+    func testFlatCacheCreationTreatedAs5Minute() {
+        let u = LocalLogsService.tokenUsage(from: ["cache_creation_input_tokens": 1_000_000])
+        XCTAssertEqual(u.cacheWrite5m, 1_000_000)
+        XCTAssertEqual(u.cacheWrite1h, 0)
+        XCTAssertEqual(LocalLogsService.estimateCost(model: "claude-opus-5", usage: u), 6.25, accuracy: 1e-9)
+    }
+
+    /// Regression against Claude Code's own figure: a real cost-state record reported
+    /// $0.0019690 for this Haiku usage. Our estimate must reproduce it.
+    func testMatchesClaudeCodeReportedCost() {
+        let u = LocalLogsService.tokenUsage(from: usage(input: 1814, output: 31))
+        XCTAssertEqual(LocalLogsService.estimateCost(model: "claude-haiku-4-5-20251001", usage: u),
+                       0.0019690, accuracy: 1e-9)
+    }
+
+    func testTokenTotalCountsEveryClass() {
+        let u = LocalLogsService.tokenUsage(from: usage(input: 1, output: 2, cacheRead: 4,
+                                                        write5m: 8, write1h: 16))
+        XCTAssertEqual(u.total, 31)
+    }
+
 }
