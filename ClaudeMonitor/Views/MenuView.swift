@@ -152,7 +152,7 @@ private struct SessionRow: View {
                             .frame(width: 12, height: 12)
                     }
                     if session.sessionCost > 0 {
-                        Text("\(formatTokens(session.sessionTokens)) · \(String(format: "$%.2f", session.sessionCost))")
+                        Text(formatTokens(session.sessionTokens))
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                             .monospacedDigit()
@@ -164,6 +164,14 @@ private struct SessionRow: View {
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .monospacedDigit()
+                }
+
+                if session.sessionCost > 0 {
+                    Text("\(String(format: "$%.2f", session.sessionCostThisMonth)) this month · \(String(format: "$%.2f", session.sessionCost)) total")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .monospacedDigit()
+                        .padding(.leading, 20)
                 }
 
                 if let status = session.currentStatus, !status.isEmpty {

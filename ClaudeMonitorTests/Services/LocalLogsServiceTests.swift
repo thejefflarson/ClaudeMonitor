@@ -15,10 +15,20 @@ final class LocalLogsServiceTests: XCTestCase {
     /// One assistant message line with the given id and token usage.
     private func assistantLine(id: String, model: String = "claude-opus-4-8",
                                input: Int, output: Int, cacheWrite: Int, cacheRead: Int,
-                               stopReason: String = "end_turn") -> String {
+                               stopReason: String = "end_turn",
+                               timestamp: String = "2026-06-01T10:00:00.000Z") -> String {
         """
-        {"timestamp":"2026-06-01T10:00:00.000Z","message":{"id":"\(id)","role":"assistant","model":"\(model)","stop_reason":"\(stopReason)","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":\(input),"output_tokens":\(output),"cache_creation_input_tokens":\(cacheWrite),"cache_read_input_tokens":\(cacheRead)}}}
+        {"timestamp":"\(timestamp)","message":{"id":"\(id)","role":"assistant","model":"\(model)","stop_reason":"\(stopReason)","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":\(input),"output_tokens":\(output),"cache_creation_input_tokens":\(cacheWrite),"cache_read_input_tokens":\(cacheRead)}}}
         """
+    }
+
+    /// An ISO-8601 UTC stamp inside the current month, which is what parseSession's
+    /// month-scoped total keys on.
+    private func timestampThisMonth(day: Int = 2) -> String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let c = cal.dateComponents([.year, .month], from: Date())
+        return String(format: "%04d-%02d-%02dT10:00:00.000Z", c.year ?? 0, c.month ?? 0, day)
     }
 
     private func makeTempFile() -> URL {
@@ -224,6 +234,52 @@ final class LocalLogsServiceTests: XCTestCase {
             called = true
         }
         XCTAssertFalse(called)
+    }
+
+
+    // MARK: - Per-session month scoping
+
+    /// The menu shows a session's spend twice: this month, and over its whole life. A
+    /// session that began in an earlier month must report a smaller month figure.
+    func testSessionCostSplitsMonthFromLifetime() {
+        let old = assistantLine(id: "msg_old", input: 1_000_000, output: 0,
+                                cacheWrite: 0, cacheRead: 0,
+                                timestamp: "2026-06-01T10:00:00.000Z")
+        let new = assistantLine(id: "msg_new", input: 500_000, output: 0,
+                                cacheWrite: 0, cacheRead: 0,
+                                timestamp: timestampThisMonth())
+        let file = makeTempFile()
+        write(old + "\n" + new + "\n", to: file)
+
+        let r = LocalLogsService.parseSession(file: file)
+        // Opus input is $5/MTok: 1M last June + 0.5M this month.
+        XCTAssertEqual(r.cost, 7.50, accuracy: 1e-9, "lifetime covers both messages")
+        XCTAssertEqual(r.costThisMonth, 2.50, accuracy: 1e-9, "month covers only the recent one")
+        XCTAssertLessThan(r.costThisMonth, r.cost)
+    }
+
+    /// A session with nothing in the current month reports zero for the month but still
+    /// reports its lifetime cost — the case that made the header and the rows disagree.
+    func testSessionEntirelyInPastMonthReportsZeroThisMonth() {
+        let file = makeTempFile()
+        write(assistantLine(id: "msg_past", input: 200_000, output: 0, cacheWrite: 0, cacheRead: 0,
+                            timestamp: "2026-07-28T00:00:00.000Z") + "\n", to: file)
+        let r = LocalLogsService.parseSession(file: file)
+        XCTAssertEqual(r.costThisMonth, 0, accuracy: 1e-9)
+        XCTAssertEqual(r.cost, 1.00, accuracy: 1e-9)
+    }
+
+    /// Month totals accumulate incrementally like the lifetime total does.
+    func testMonthCostAccumulatesAcrossAppends() {
+        let file = makeTempFile()
+        let a = assistantLine(id: "m_a", input: 100_000, output: 0, cacheWrite: 0, cacheRead: 0,
+                              timestamp: timestampThisMonth(day: 2))
+        let b = assistantLine(id: "m_b", input: 100_000, output: 0, cacheWrite: 0, cacheRead: 0,
+                              timestamp: timestampThisMonth(day: 3))
+        write(a + "\n", to: file)
+        XCTAssertEqual(LocalLogsService.parseSession(file: file).costThisMonth, 0.50, accuracy: 1e-9)
+        write(a + "\n" + b + "\n", to: file)
+        XCTAssertEqual(LocalLogsService.parseSession(file: file).costThisMonth, 1.00, accuracy: 1e-9)
     }
 
 }

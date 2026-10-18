@@ -170,6 +170,7 @@ enum LocalLogsService {
                 inProgressTasks: readTasks(sessionId: sessionId),
                 isProcessing: parsed.isProcessing,
                 sessionCost: parsed.cost,
+                sessionCostThisMonth: parsed.costThisMonth,
                 sessionTokens: parsed.tokens
             ))
         }
@@ -230,7 +231,8 @@ enum LocalLogsService {
     struct SessionParseResult {
         var isProcessing: Bool
         var lastMessage: String?
-        var cost: Double
+        var cost: Double            // the session's whole life
+        var costThisMonth: Double   // only messages stamped in the current UTC month
         var tokens: Int
     }
 
@@ -238,6 +240,8 @@ enum LocalLogsService {
         var mtime: Date
         var offset: UInt64          // bytes consumed for cost/tokens, aligned to a line boundary
         var totalCost: Double
+        var monthCost: Double
+        var monthPrefix: String     // the month monthCost covers; a new month invalidates it
         var totalTokens: Int
         var seenIDs: Set<String>    // message.ids already counted, to survive across incremental reads
         var result: SessionParseResult
@@ -252,6 +256,17 @@ enum LocalLogsService {
 
     /// Bytes read per `forEachLine` chunk — caps the month scan's memory use.
     static let scanChunkSize = 1_048_576
+
+    /// The current UTC month as a `yyyy-MM` prefix. Log timestamps are ISO-8601 in UTC
+    /// (every one ends in `Z`), so a message belongs to this month exactly when its
+    /// timestamp starts with this string — no date parsing per line, which matters in a
+    /// pass that runs over every appended line on every poll.
+    private static func currentMonthPrefix(_ now: Date = Date()) -> String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let c = cal.dateComponents([.year, .month], from: now)
+        return String(format: "%04d-%02d", c.year ?? 0, c.month ?? 0)
+    }
 
     /// `"usage"` as bytes — the cheap pre-filter for scan lines worth parsing.
     private static let usageKey = Data(#""usage""#.utf8)
@@ -271,9 +286,12 @@ enum LocalLogsService {
         }
 
         guard let handle = try? FileHandle(forReadingFrom: file) else {
-            return SessionParseResult(isProcessing: false, lastMessage: nil, cost: 0, tokens: 0)
+            return SessionParseResult(isProcessing: false, lastMessage: nil,
+                                      cost: 0, costThisMonth: 0, tokens: 0)
         }
         defer { try? handle.close() }
+
+        let monthPrefix = currentMonthPrefix()
 
         // Read the true size from the open handle. URL.resourceValues(.fileSizeKey) caches
         // on the URL and returns a stale size on a growing file, which would freeze the
@@ -282,13 +300,17 @@ enum LocalLogsService {
 
         // Resume the running totals unless the file shrank (truncation/rotation), in which
         // case start fresh — a shorter file can't be an append to what we already counted.
+        // The month total also has to restart when the calendar month turns over, since the
+        // cached figure covers a month that is no longer the current one.
         var offset: UInt64 = 0
         var totalCost = 0.0
+        var monthCost = 0.0
         var totalTokens = 0
         var seenMessageIDs = Set<String>()   // dedupe repeated assistant responses (see monthlyUsage)
-        if let cached, fileSize >= cached.offset {
+        if let cached, fileSize >= cached.offset, cached.monthPrefix == monthPrefix {
             offset = cached.offset
             totalCost = cached.totalCost
+            monthCost = cached.monthCost
             totalTokens = cached.totalTokens
             seenMessageIDs = cached.seenIDs
         }
@@ -315,8 +337,12 @@ enum LocalLogsService {
 
                     let model  = msg["model"] as? String ?? ""
                     let tokens = tokenUsage(from: usage)
-                    totalCost += estimateCost(model: model, usage: tokens)
+                    let lineCost = estimateCost(model: model, usage: tokens)
+                    totalCost += lineCost
                     totalTokens += tokens.total
+                    if let ts = obj["timestamp"] as? String, ts.hasPrefix(monthPrefix) {
+                        monthCost += lineCost
+                    }
                 }
             }
         }
@@ -387,8 +413,10 @@ enum LocalLogsService {
         }
 
         let result = SessionParseResult(isProcessing: isProcessing, lastMessage: lastMsg,
-                                        cost: totalCost, tokens: totalTokens)
+                                        cost: totalCost, costThisMonth: monthCost,
+                                        tokens: totalTokens)
         parseCache[key] = CacheEntry(mtime: mtime, offset: offset, totalCost: totalCost,
+                                     monthCost: monthCost, monthPrefix: monthPrefix,
                                      totalTokens: totalTokens, seenIDs: seenMessageIDs,
                                      result: result)
         return result

@@ -8,6 +8,7 @@ struct SessionInfo: Identifiable {
     var inProgressTasks: [TaskItem] = []
     var isProcessing: Bool = false
     var isCompacting: Bool = false
-    var sessionCost: Double = 0
+    var sessionCost: Double = 0            // whole session
+    var sessionCostThisMonth: Double = 0   // current UTC month only
     var sessionTokens: Int = 0
 }
